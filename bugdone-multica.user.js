@@ -31,6 +31,20 @@
   const VERSION = 1;
   const UUID = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
   const BUGID = /^[a-f\d]{32}$/i;
+  const BUGDONE_PROFILE = {
+    schemaVersion: 1, id: 'bugdone', version: 1, enabled: true,
+    allowedOrigins: ['https://www.bugdone.cn'],
+    pages: [{ kind: 'list', path: '/cn/bugManagement_*' }, { kind: 'detail', path: '/cn/bugManagement_*' }],
+    captures: [{ id: 'bug-api', method: 'POST', origin: 'https://www.bugdone.cn',
+      path: '/Service/BugDone/BugAPI.ashx', maxResponseBytes: 4_000_000,
+      success: { path: '$.Result', equals: 1 }, variants: [
+        { kind: 'list', path: '$.ReturnObj.ItemList', type: 'array' },
+        { kind: 'detail', path: '$.ReturnObj', type: 'object' }
+      ] }],
+    record: { scopeId: '$.ProjectId', recordId: '$.BugId', title: '$.BugTitle', number: '$.BugCode', descriptionHtml: '$.Description' },
+    draft: { titleTemplate: '[BugDone] #{{number}} {{title}} [BugDone:{{recordId}}]' },
+    dedup: { keyTemplate: 'bugdone:{{scopeId}}:{{recordId}}' }, attachments: [], postActions: []
+  };
   // 与官网 #btnShare 使用同一规则；二维码接口不负责生成此网页链接。
   function shareURL(b) {
     if (!BUGID.test(b.ProjectId || '') || !BUGID.test(b.BugId || '')) return '';
@@ -40,21 +54,11 @@
   function bugTaskTitle(b) {
     return `[BugDone] #${b.BugCode} ${b.BugTitle} ${marker(b.BugId)}`;
   }
-  const isBugAPI = value => {
-    try {
-      const u = new URL(String(value), 'https://www.bugdone.cn');
-      return u.origin === 'https://www.bugdone.cn' && u.pathname.toLowerCase() === '/service/bugdone/bugapi.ashx';
-    } catch { return false; }
-  };
+  const isBugAPI = (value, method = 'POST') => !!matchSiteCapture(BUGDONE_PROFILE, { url: value, method });
   function parseResponse(value) {
-    let x = value;
-    for (let i = 0; i < 2 && typeof x === 'string'; i++) x = JSON.parse(x);
-    if (!x || x.Result !== 1 || !x.ReturnObj) return [];
-    const r = x.ReturnObj;
-    const detail = !Array.isArray(r.ItemList);
-    return (detail ? [r] : r.ItemList).filter(b =>
+    return extractProfileItems(BUGDONE_PROFILE.captures[0], value).filter(({ item: b }) =>
       b && BUGID.test(b.BugId || '') && typeof b.BugTitle === 'string'
-    ).map(b => ({
+    ).map(({ item: b, kind }) => ({
       BugId: b.BugId.toLowerCase(), BugCode: b.BugCode, BugTitle: b.BugTitle,
       ProjectId: b.ProjectId || '', ProjectName: b.ProjectName || '',
       ProductName: b.ProductName || '', ModuleName: b.ModuleName || '',
@@ -62,7 +66,7 @@
       Description: typeof b.Description === 'string' ? b.Description : '',
       Environment: b.Environment || '', PicCount: b.PicCount || 0,
       AttachmentCount: b.AttachmentCount || 0,
-      detail, sourceUrl: '',
+      detail: kind === 'detail', sourceUrl: '',
       attachments: (Array.isArray(b.BugAccessoryList) ? b.BugAccessoryList : [])
         .filter(a => a && a.ActiveFlg !== false && a.FullFileUrl)
         .map(a => ({ url: safeURL(a.FullFileUrl), name: String(a.FileName || a.AccessoryName || a.FileUrl || '附件'), image: /^(png|jpe?g|gif|webp|bmp)$/i.test(a.ext || '') }))
@@ -151,6 +155,136 @@
     if (!label) return 'none';
     if (!Array.isArray(issue?.labels)) return 'unknown';
     return issue.labels.some(item => item?.id === label) ? 'applied' : 'missing';
+  }
+  const PROFILE_PATH = /^\$(?:\.[A-Za-z_][A-Za-z\d_]*)*$/;
+  function profileValue(data, path) {
+    if (typeof path !== 'string' || !PROFILE_PATH.test(path)) return undefined;
+    return path === '$' ? data : path.slice(2).split('.').reduce((value, key) =>
+      value && typeof value === 'object' && Object.hasOwn(value, key) ? value[key] : undefined, data);
+  }
+  function validateSiteProfile(profile) {
+    const fields = (value, allowed, context) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error(`${context} 必须是对象`);
+      for (const key of Object.keys(value)) if (!allowed.includes(key)) throw Error(`不支持的配置字段：${context}.${key}`);
+    };
+    fields(profile, ['schemaVersion', 'id', 'version', 'enabled', 'allowedOrigins', 'pages', 'captures', 'record', 'draft', 'dedup', 'attachments', 'postActions'], 'profile');
+    if (profile.schemaVersion !== 1 || !/^[a-z][a-z0-9-]{1,63}$/.test(profile.id || '') || !Number.isInteger(profile.version) || profile.version < 1 || typeof profile.enabled !== 'boolean') throw Error('站点配置版本或标识无效');
+    if (!Array.isArray(profile.allowedOrigins) || !profile.allowedOrigins.length || profile.allowedOrigins.length > 8) throw Error('允许的站点不能为空');
+    for (const origin of profile.allowedOrigins) {
+      const url = new URL(origin);
+      if (url.protocol !== 'https:' || url.origin !== origin || url.username || url.password) throw Error('允许的站点必须是 HTTPS 根地址');
+    }
+    if (!Array.isArray(profile.pages) || !profile.pages.length) throw Error('页面规则不能为空');
+    for (const page of profile.pages) {
+      fields(page, ['kind', 'path'], 'pages');
+      if (!['list', 'detail'].includes(page.kind) || typeof page.path !== 'string' || !/^\/[A-Za-z\d_/*:-]+$/.test(page.path)) throw Error('页面路径规则无效');
+    }
+    if (!Array.isArray(profile.captures) || !profile.captures.length) throw Error('网络捕获规则不能为空');
+    for (const rule of profile.captures) {
+      fields(rule, ['id', 'method', 'origin', 'path', 'maxResponseBytes', 'success', 'variants'], 'captures');
+      if (!/^[a-z][a-z0-9-]{1,63}$/.test(rule.id || '') || !['GET', 'POST'].includes(rule.method) || !profile.allowedOrigins.includes(rule.origin) || typeof rule.path !== 'string' || !/^\/[A-Za-z\d_./-]+$/.test(rule.path) || !Number.isInteger(rule.maxResponseBytes) || rule.maxResponseBytes < 1 || rule.maxResponseBytes > 4_000_000) throw Error('捕获规则超出允许的站点或范围');
+      fields(rule.success, ['path', 'equals'], 'success');
+      if (!PROFILE_PATH.test(rule.success.path || '') || !['string', 'number', 'boolean'].includes(typeof rule.success.equals)) throw Error('成功条件无效');
+      if (!Array.isArray(rule.variants) || !rule.variants.length) throw Error('响应变体不能为空');
+      for (const variant of rule.variants) {
+        fields(variant, ['kind', 'path', 'type'], 'variants');
+        if (!['list', 'detail'].includes(variant.kind) || !PROFILE_PATH.test(variant.path || '') || !['array', 'object'].includes(variant.type)) throw Error('响应变体无效');
+      }
+    }
+    fields(profile.record, ['scopeId', 'recordId', 'title', 'number', 'descriptionHtml'], 'record');
+    for (const key of ['scopeId', 'recordId', 'title']) if (!PROFILE_PATH.test(profile.record[key] || '')) throw Error(`字段路径无效：${key}`);
+    for (const key of ['number', 'descriptionHtml']) if (profile.record[key] && !PROFILE_PATH.test(profile.record[key])) throw Error(`字段路径无效：${key}`);
+    fields(profile.draft, ['titleTemplate'], 'draft');
+    fields(profile.dedup, ['keyTemplate'], 'dedup');
+    if (typeof profile.draft.titleTemplate !== 'string' || typeof profile.dedup.keyTemplate !== 'string' || !Array.isArray(profile.attachments) || !Array.isArray(profile.postActions)) throw Error('任务草稿或附件配置无效');
+    return profile;
+  }
+  function matchSiteCapture(profile, { url, method, bytes = 0, contentType = '' }) {
+    if (!profile?.enabled) return null;
+    const parsed = locationOf(url, profile.allowedOrigins[0]);
+    if (!profile.allowedOrigins.includes(parsed?.origin)) return null;
+    if (!parsed || (contentType && !/\bjson\b|\+json\b/i.test(contentType))) return null;
+    return profile.captures.find(rule => rule.method === String(method).toUpperCase() && rule.origin === parsed.origin &&
+      rule.path.toLowerCase() === parsed.pathname.toLowerCase() && bytes <= rule.maxResponseBytes) || null;
+  }
+  function locationOf(url, base) { try { return new URL(String(url), base); } catch { return null; } }
+  function extractProfileItems(rule, value) {
+    let data = value;
+    for (let i = 0; i < 2 && typeof data === 'string'; i++) { try { data = JSON.parse(data); } catch { return []; } }
+    if (!data || profileValue(data, rule.success.path) !== rule.success.equals) return [];
+    for (const variant of rule.variants) {
+      const result = profileValue(data, variant.path);
+      if (variant.type === 'array' && Array.isArray(result)) return result.filter(item => item && typeof item === 'object' && !Array.isArray(item)).map(item => ({ kind: variant.kind, item }));
+      if (variant.type === 'object' && result && typeof result === 'object' && !Array.isArray(result)) return [{ kind: variant.kind, item: result }];
+    }
+    return [];
+  }
+  function normalizeCapturedRecord(profile, raw, context = {}) {
+    const field = name => profileValue(raw, profile.record[name]);
+    const scopeId = field('scopeId'), recordId = field('recordId'), title = field('title');
+    if (!scopeId || !recordId || typeof title !== 'string' || !title.trim()) return null;
+    return { siteId: profile.id, scopeId: String(scopeId), recordId: String(recordId),
+      pageKind: context.kind || 'list', detail: context.kind === 'detail', sourceUrl: context.sourceUrl || '',
+      title, number: field('number') ?? '', descriptionHtml: field('descriptionHtml') || '',
+      descriptionBlocks: [], attachments: [], logs: [], fieldSources: {},
+      capturedAt: context.capturedAt || new Date().toISOString(), completeness: context.kind === 'detail' ? 'detail' : 'summary' };
+  }
+  function recordKey(record) { return [record.siteId, record.scopeId, record.recordId].map(value => `${String(value).length}:${value}`).join(''); }
+  function mergeCapturedRecord(previous, next) {
+    if (!previous) return next;
+    if (recordKey(previous) !== recordKey(next)) throw Error('不能合并不同来源的记录');
+    if (previous.detail && !next.detail) return previous;
+    const merged = { ...previous, ...next, detail: previous.detail || next.detail };
+    for (const [key, value] of Object.entries(next)) {
+      if ((value === null || value === undefined || value === '' || (Array.isArray(value) && !value.length)) &&
+          previous[key] !== undefined) merged[key] = previous[key];
+    }
+    return merged;
+  }
+  function collectStandardRecords(profile, entries, store, sourceUrl) {
+    let count = 0;
+    for (const { kind, item } of entries) {
+      const record = normalizeCapturedRecord(profile, item, { kind, sourceUrl });
+      if (!record) continue;
+      const key = recordKey(record);
+      store.set(key, mergeCapturedRecord(store.get(key), record));
+      count++;
+    }
+    return count;
+  }
+  function installCaptureHooks(page, collectResponse, matches) {
+    const requests = new WeakMap();
+    const prototype = page.XMLHttpRequest?.prototype;
+    if (prototype) {
+      const originalOpen = prototype.open, originalSend = prototype.send;
+      prototype.open = function(method, url, ...args) {
+        requests.set(this, { method: String(method).toUpperCase(), url: String(url) });
+        return originalOpen.call(this, method, url, ...args);
+      };
+      prototype.send = function(...args) {
+        const request = requests.get(this);
+        if (request && matches(request.url, request.method)) this.addEventListener('load', function() {
+          if (this.status !== 200) return;
+          try { collectResponse(this.responseType === 'json' ? this.response : this.responseText); }
+          catch (_) { /* 捕获失败不影响源站请求 */ }
+        }, { once: true });
+        return originalSend.apply(this, args);
+      };
+    }
+    if (typeof page.fetch === 'function') {
+      const originalFetch = page.fetch;
+      page.fetch = function(...args) {
+        const result = originalFetch.apply(this, args);
+        const input = args[0];
+        const url = typeof input === 'string' || input instanceof URL ? String(input) : input?.url;
+        const method = String(args[1]?.method || input?.method || 'GET').toUpperCase();
+        if (matches(url, method)) Promise.resolve(result).then(async response => {
+          if (response.ok) collectResponse(await response.clone().text());
+        }).catch(() => {});
+        return result;
+      };
+    }
+    return { xhr: !!prototype, fetch: typeof page.fetch === 'function' };
   }
   const owns = (issue, id) => typeof issue?.title === 'string' &&
     (issue.title.startsWith(marker(id) + ' ') || issue.title.endsWith(' ' + marker(id)));
@@ -270,7 +404,7 @@
     webLocks: !!navigator.locks
   });
 
-  const bugs = new Map();
+  const bugs = new Map(), capturedRecords = new Map();
   let currentId = '', root, busy = false, previewFingerprint = '';
   // Mac App WebView 不提供 GM_getValue/GM_setValue；存储完全走 Web Storage，避免触发不存在的油猴 API。
   const hasGMStorage = false;
@@ -397,6 +531,7 @@
   function collect(data) {
     try {
       const items = parseResponse(data);
+      collectStandardRecords(BUGDONE_PROFILE, extractProfileItems(BUGDONE_PROFILE.captures[0], data), capturedRecords, location.href);
       debug('响应解析完成', { bugs: items.length, details: items.filter(b => b.detail).length });
       for (const b of items) {
         b.sourceUrl = location.href;
@@ -422,18 +557,18 @@
     const pageBridge = function() {
       if (window.__bugdoneMulticaPageBridge) return;
       window.__bugdoneMulticaPageBridge = true;
-      const isBugAPI = value => { try { const u = new URL(String(value), location.href); return u.origin === location.origin && u.pathname.toLowerCase() === '/service/bugdone/bugapi.ashx'; } catch (_) { return false; } };
+      const isBugAPI = (value, method) => { try { const u = new URL(String(value), location.href); return String(method).toUpperCase() === 'POST' && u.origin === location.origin && u.pathname.toLowerCase() === '/service/bugdone/bugapi.ashx'; } catch (_) { return false; } };
       const send = value => { if (typeof value !== 'string' || value.length > 4000000) return; window.postMessage({ __bugdoneMulticaBridge: true, text: value }, '*'); };
       const xhrURLs = new WeakMap();
       const XHR = window.XMLHttpRequest;
       if (XHR?.prototype) {
         const open = XHR.prototype.open, sendOriginal = XHR.prototype.send;
-        XHR.prototype.open = function(method, url, ...args) { xhrURLs.set(this, String(url)); return open.call(this, method, url, ...args); };
-        XHR.prototype.send = function(...args) { if (isBugAPI(xhrURLs.get(this))) this.addEventListener('load', function() { if (this.status === 200) { try { send(this.responseType === 'json' ? JSON.stringify(this.response) : this.responseText); } catch (_) {} } }, { once: true }); return sendOriginal.apply(this, args); };
+        XHR.prototype.open = function(method, url, ...args) { xhrURLs.set(this, { method, url: String(url) }); return open.call(this, method, url, ...args); };
+        XHR.prototype.send = function(...args) { const request = xhrURLs.get(this); if (request && isBugAPI(request.url, request.method)) this.addEventListener('load', function() { if (this.status === 200) { try { send(this.responseType === 'json' ? JSON.stringify(this.response) : this.responseText); } catch (_) {} } }, { once: true }); return sendOriginal.apply(this, args); };
       }
       if (typeof window.fetch === 'function') {
         const fetchOriginal = window.fetch;
-        window.fetch = function(...args) { const result = fetchOriginal.apply(this, args); const url = typeof args[0] === 'string' || args[0] instanceof URL ? String(args[0]) : args[0]?.url; if (isBugAPI(url)) Promise.resolve(result).then(response => { if (response.ok) return response.clone().text().then(send); }).catch(() => {}); return result; };
+        window.fetch = function(...args) { const result = fetchOriginal.apply(this, args); const input = args[0], url = typeof input === 'string' || input instanceof URL ? String(input) : input?.url; const method = args[1]?.method || input?.method || 'GET'; if (isBugAPI(url, method)) Promise.resolve(result).then(response => { if (response.ok) return response.clone().text().then(send); }).catch(() => {}); return result; };
       }
     };
     const inject = () => {
@@ -452,51 +587,8 @@
   // 只旁观已知 BugAPI 的成功响应；不读取请求体、Cookie 或 Authorization。
   let captureHookFailed = false;
   try {
-  const page = unsafeWindow;
-  const xhrURLs = new WeakMap();
-  const originalOpen = page.XMLHttpRequest.prototype.open;
-  const originalSend = page.XMLHttpRequest.prototype.send;
-  page.XMLHttpRequest.prototype.open = function(method, url, ...args) {
-    xhrURLs.set(this, String(url));
-    return originalOpen.call(this, method, url, ...args);
-  };
-  page.XMLHttpRequest.prototype.send = function(...args) {
-    if (isBugAPI(xhrURLs.get(this))) {
-      debug('捕获 BugAPI XHR 请求');
-      this.addEventListener('load', function() {
-        debug('BugAPI XHR 响应', { status: this.status, responseType: this.responseType });
-        try { if (this.status === 200) collect(this.responseType === 'json' ? this.response : this.responseText); }
-        catch (e) { debug('XHR 响应读取失败', { errorType: e.name }, 'warn'); }
-      }, { once: true });
-      this.addEventListener('error', () => debug('BugAPI XHR 网络错误', {}, 'warn'), { once: true });
-    }
-    return originalSend.apply(this, args);
-  };
-  if (typeof page.fetch === 'function') {
-    const originalFetch = page.fetch;
-    async function observeBugFetch(promise) {
-      try {
-        const response = await promise;
-        debug('BugAPI fetch 响应', { status: response.status });
-        if (response.ok) {
-          const text = await response.clone().text();
-          collect(text);
-        }
-      } catch (error) {
-        debug('BugAPI fetch 捕获失败', { errorType: error.name }, 'warn');
-      }
-    }
-    page.fetch = function(...args) {
-      const result = originalFetch.apply(this, args);
-      const url = typeof args[0] === 'string' || args[0] instanceof URL ? String(args[0]) : args[0]?.url;
-      if (isBugAPI(url)) {
-        debug('捕获 BugAPI fetch 请求');
-        void observeBugFetch(result);
-      }
-      return result;
-    };
-  }
-  debug('接口监听已安装', { xhr: true, fetch: typeof page.fetch === 'function' });
+    const installed = installCaptureHooks(unsafeWindow, collect, isBugAPI);
+    debug('接口监听已安装', installed);
   } catch (e) {
     captureHookFailed = true;
     debug('接口监听安装失败', { errorType: e.name }, 'error');
