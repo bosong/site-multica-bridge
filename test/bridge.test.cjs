@@ -9,7 +9,7 @@ assert.ok(start >= 0 && end > start);
 assert.ok(!/\bmodule\b|\brequire\s*\(/.test(source));
 const bridge = new Function('return ' + source.slice(start, end) +
   'return { parseResponse, mergeBug, marker, owns, isBugAPI, validateConfig, findExisting, submitOnce, shareURL, agentChoices, agentCacheKey, listItems, buildIssueBody, issueLabelState, bugTaskTitle, connectionCacheTag, needsCatalogRefresh, connectionBadge, verifyConnection, lookupSubmittedIssue, issueStatusLabel, loadSubmittedStatuses, shortcutFromEvent, shortcutMatches, normalizeShortcutConfig, startBugDoneProcessing };\n})();')();
-const id = '7603f73c983242c1811852a53b26e2c3';
+const id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const c = { api: 'https://api.multica.ai', workspace: '11111111-1111-4111-8111-111111111111', token: 'test' };
 const bug = { BugId: id };
 const issue = { id: 'task-id', title: `${bridge.marker(id)} 测试 Bug`, status: 'done' };
@@ -79,7 +79,7 @@ test('刷新标签目录时保留已保存的默认标签，不静默清空创�
   const end = source.indexOf('  async function loadWorkspaceData(');
   assert.ok(start >= 0 && end > start);
   class Select {
-    constructor() { this.options = []; this.current = ''; }
+    constructor() { this.options = []; this.current = ''; this.dataset = {}; }
     replaceChildren() { this.options = []; this.current = ''; }
     append(option) { this.options.push(option); if (this.options.length === 1) this.current = option.value; }
     get value() { return this.current; }
@@ -94,12 +94,27 @@ test('刷新标签目录时保留已保存的默认标签，不静默清空创�
   const root = { getElementById: id => elements[id] };
   const config = { project: '', agent: '', defaultAgent: '', label: '6ee01bdb-c3dd-4892-a8dd-f4097b70b34a' };
   const { applyCatalog } = new Function('document', 'root', 'config', 'renderAgentChoices',
-    `const $ = id => root.getElementById(id);\n${source.slice(start, end)}\nreturn { applyCatalog };`)(
+    `const $ = id => root.getElementById(id), activeDraft=null, taskDraft=null, activeProfile=null; ${source.slice(source.indexOf('  function resolveProfileLabel('),source.indexOf('  function selectSiteProfile('))}\n${source.slice(start, end)}\nreturn { applyCatalog };`)(
     document, root, config, () => 0);
   applyCatalog(config, { projects: [], agents: [], labels: [] });
   assert.equal(elements['default-label'].value, config.label);
   assert.equal(elements['task-label'].value, config.label);
   assert.match(elements['task-label'].options.at(-1).textContent, /已保存/);
+  applyCatalog({...config,api:'https://another.example.test'}, {projects:[],agents:[],labels:[]});
+  assert.equal(elements['default-label'].value,'','新服务不得继承旧服务默认标签');
+  assert.equal(elements['task-label'].value,'');
+  applyCatalog(config,{projects:[],agents:[],labels:[]});
+  elements['task-label'].append({ value: 'user-label', textContent: '用户标签' });
+  elements['task-label'].value = 'user-label';
+  elements['task-label'].dataset.userEdited = 'true';
+  applyCatalog(config, { projects: [], agents: [], labels: [] });
+  assert.equal(elements['task-label'].value, 'user-label');
+  config.workspace = 'different-workspace'; config.label = '';
+  applyCatalog(config, { projects: [], agents: [], labels: [] });
+  assert.equal(elements['task-label'].value, '', '工作区变化后不可继续使用上个工作区的手动标签');
+  config.project = ''; config.projectCustomized = true;
+  applyCatalog(config, { projects: [{id:'project-available',name:'可选项目'}], agents: [], labels: [] });
+  assert.equal(elements['default-project'].value, '', '明确选择不指定项目后，刷新目录不应自动改回第一个项目');
 });
 test('选择默认标签后立即保存配置，并同步到任务创建页', () => {
   const start = source.indexOf("    for (const id of ['default-project', 'default-label']) $(id).addEventListener('change'", source.indexOf('  function mount()'));
@@ -108,12 +123,12 @@ test('选择默认标签后立即保存配置，并同步到任务创建页', ()
   const listeners = new Map(), saved = [];
   const values = {
     'default-project': { value: '' }, 'task-project': { value: '' },
-    'default-label': { value: '6ee01bdb-c3dd-4892-a8dd-f4097b70b34a' }, 'task-label': { value: '' }
+    'default-label': { value: '6ee01bdb-c3dd-4892-a8dd-f4097b70b34a' }, 'task-label': { value: '', dataset: {} }
   };
   for (const [id, element] of Object.entries(values)) element.addEventListener = (name, fn) => listeners.set(`${id}:${name}`, fn);
   const config = { label: '' };
   new Function('values', 'config', 'writeValue', 'message', 'debug',
-    `const $ = id => values[id];\n${source.slice(start, end)}`)(values, config,
+    `const $ = id => values[id],activeDraft=null,taskDraft=null,activeProfile=null; const applyTaskDefaultLabel=()=>{values['task-label'].value=values['default-label'].value;};\n${source.slice(start, end)}`)(values, config,
     (key, value) => saved.push([key, value]), () => {}, () => {});
   listeners.get('default-label:change')();
   assert.equal(values['task-label'].value, values['default-label'].value);
@@ -167,7 +182,7 @@ test('已保存的智能体无需重新读取即可在设置和接入页恢复',
   });
 });
 test('分享地址采用官网项目与 Bug ID 路径，缺失或非法 ID 不生成链接', () => {
-  const project = '45b65385f2a443dba353aa93fa2b8cf8';
+  const project = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   assert.equal(bridge.shareURL({ ProjectId: project, BugId: id }), `https://www.bugdone.cn/cn/bugPreview/${project}/${id}`);
   assert.equal(bridge.shareURL({ BugId: id }), '');
   assert.equal(bridge.shareURL({ ProjectId: '../other', BugId: id }), '');

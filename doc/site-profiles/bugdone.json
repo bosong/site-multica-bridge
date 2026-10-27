@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 2,
+  "id": "bugdone",
+  "version": 2,
+  "enabled": true,
+  "metadata": {
+    "name": "BugDone"
+  },
+  "adapter": "bugdone",
+  "defaultLabel": {
+    "mode": "inherit"
+  },
+  "presentation": {
+    "recordLabel": "选择问题",
+    "hideSelectors": [
+      "#openIntelligentTracking"
+    ],
+    "drawerSelectors": [
+      "#asideProblem"
+    ]
+  },
+  "links": {
+    "shareTemplate": "https://www.bugdone.cn/cn/bugPreview/{{scopeId}}/{{recordId}}"
+  },
+  "allowedOrigins": [
+    "https://www.bugdone.cn",
+    "https://bugdone.cn"
+  ],
+  "pages": [
+    {
+      "kind": "list",
+      "path": "/cn/bugManagement_*"
+    },
+    {
+      "kind": "list",
+      "path": "/cn/bugManagement/:view/:projectId/:productId"
+    },
+    {
+      "kind": "detail",
+      "path": "/cn/bugPreview/:projectId/:bugId"
+    }
+  ],
+  "captures": [
+    {
+      "id": "bug-api",
+      "method": "POST",
+      "origin": "https://www.bugdone.cn",
+      "path": "/Service/BugDone/BugAPI.ashx",
+      "maxResponseBytes": 4000000,
+      "success": {
+        "path": "$.Result",
+        "equals": 1
+      },
+      "variants": [
+        {
+          "kind": "list",
+          "path": "$.ReturnObj.ItemList",
+          "type": "array"
+        },
+        {
+          "kind": "detail",
+          "path": "$.ReturnObj",
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "id": "bug-api-alias",
+      "method": "POST",
+      "origin": "https://bugdone.cn",
+      "path": "/Service/BugDone/BugAPI.ashx",
+      "maxResponseBytes": 4000000,
+      "success": {
+        "path": "$.Result",
+        "equals": 1
+      },
+      "variants": [
+        {
+          "kind": "list",
+          "path": "$.ReturnObj.ItemList",
+          "type": "array"
+        },
+        {
+          "kind": "detail",
+          "path": "$.ReturnObj",
+          "type": "object"
+        }
+      ]
+    }
+  ],
+  "record": {
+    "scopeId": "$.ProjectId",
+    "recordId": "$.BugId",
+    "title": "$.BugTitle",
+    "number": "$.BugCode",
+    "descriptionHtml": "$.Description",
+    "fields": {
+      "projectName": "$.ProjectName",
+      "productName": "$.ProductName",
+      "moduleName": "$.ModuleName",
+      "priority": "$.StrPriority",
+      "state": "$.StrBugStatus",
+      "environment": "$.Environment"
+    }
+  },
+  "draft": {
+    "titleTemplate": "[BugDone] #{{number}} {{title}} [BugDone:{{recordId}}]",
+    "descriptionTemplate": "[BugDone:{{recordId}}]\n\n来源：{{sourceUrl}}\n只读分享：{{shareUrl}}\nBug ID：{{recordId}}\n编号：{{number}}\n项目：{{projectName}}\n产品：{{productName}}\n模块：{{moduleName}}\n优先级：{{priority}}\nBugDone 状态：{{state}}\n环境：{{environment}}\n\n任务要求：\n{{title}}\n\n详细描述：\n{{description}}\n\n截图与附件：\n{{attachmentLinks}}\n\n请分析问题并修复，在交付时说明根因、修改和验证结果；遇到信息不足时先在任务中说明。"
+  },
+  "dedup": {
+    "keyTemplate": "bugdone:{{scopeId}}:{{recordId}}"
+  },
+  "attachments": [
+    {
+      "id": "screenshots",
+      "kind": "image-url",
+      "path": "$.BugAccessoryList",
+      "items": {
+        "url": "$.FullFileUrl",
+        "name": "$.FileName",
+        "extension": "$.ext",
+        "filter": {
+          "path": "$.ActiveFlg",
+          "notEquals": false
+        }
+      },
+      "filenameTemplate": "bug-{{recordId}}.png",
+      "allowedOrigins": [
+        "https://img.bugdone.cn"
+      ],
+      "transform": {
+        "preset": "image",
+        "maxDimension": 2200,
+        "quality": 0.9
+      }
+    }
+  ],
+  "postActions": [
+    {
+      "adapter": "bugdone.start-processing",
+      "enabled": true
+    }
+  ]
+}

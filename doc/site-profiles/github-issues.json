@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 2,
+  "id": "github-issues",
+  "version": 2,
+  "enabled": true,
+  "metadata": {
+    "name": "GitHub Issues"
+  },
+  "defaultLabel": {
+    "mode": "inherit"
+  },
+  "presentation": {
+    "recordLabel": "选择 Issue"
+  },
+  "identity": {
+    "scopeTemplate": "{{owner}}/{{repo}}",
+    "recordParam": "number",
+    "recordFormat": "positive-integer",
+    "sourceTemplate": "https://github.com/{{owner}}/{{repo}}/issues/{{recordId}}"
+  },
+  "allowedOrigins": [
+    "https://github.com"
+  ],
+  "pages": [
+    {
+      "kind": "list",
+      "path": "/:owner/:repo/issues"
+    },
+    {
+      "kind": "detail",
+      "path": "/:owner/:repo/issues/:number"
+    }
+  ],
+  "captures": [
+    {
+      "id": "github-issue-list",
+      "method": "GET",
+      "origin": "https://github.com",
+      "path": "/:owner/:repo/issues",
+      "maxResponseBytes": 4000000,
+      "requestOnPage": true,
+      "variants": [
+        {
+          "kind": "list",
+          "path": "$.payload.issuesIndexContentRoute.results",
+          "type": "array",
+          "itemPath": "$.issue"
+        }
+      ]
+    },
+    {
+      "id": "github-issue-detail",
+      "method": "GET",
+      "origin": "https://github.com",
+      "path": "/:owner/:repo/issues/:number",
+      "maxResponseBytes": 4000000,
+      "requestOnPage": true,
+      "variants": [
+        {
+          "kind": "detail",
+          "path": "$.payload.issueViewerRoute.data.repository.issue",
+          "type": "object"
+        }
+      ]
+    }
+  ],
+  "record": {
+    "scopeId": [
+      "$.repoNameWithOwner",
+      "$.repository.nameWithOwner"
+    ],
+    "recordId": "$.number",
+    "title": "$.title",
+    "number": "$.number",
+    "descriptionText": "$.body",
+    "sourceUrl": [
+      "$.permalink",
+      "$.url"
+    ]
+  },
+  "draft": {
+    "titleTemplate": "[GitHub Issues] #{{number}} {{title}}"
+  },
+  "dedup": {
+    "keyTemplate": "github-issues:{{scopeId}}:{{recordId}}"
+  },
+  "attachments": [],
+  "postActions": []
+}
