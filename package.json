@@ -1,6 +1,6 @@
 {
-  "name": "bugdone-multica-bridge",
-  "version": "1.0.9",
+  "name": "site-multica-bridge",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.cjs",

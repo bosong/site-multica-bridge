@@ -1,10 +1,10 @@
 // ==UserScript==
-// @name         BugDone 接入 Multica
-// @namespace    local.bugdone.multica
-// @version      1.0.9
-// @description  BugDone桥接Multica智能体
-// @updateURL    https://raw.githubusercontent.com/bosong/bugdone-multica-bridge/main/bugdone-multica.user.js
-// @downloadURL  https://raw.githubusercontent.com/bosong/bugdone-multica-bridge/main/bugdone-multica.user.js
+// @name         Site 接入 Multica
+// @namespace    local.site.multica
+// @version      2.0.0
+// @description  多站点信息捕获与 Multica 智能体任务桥接
+// @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
+// @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
 // @match        https://*/*
 // @run-at       document-start
 // @fastlane-network
@@ -1067,7 +1067,7 @@
   }
   // 调试桩：仅打印阶段、数量和 HTTP 状态，不打印令牌、请求头或 Bug 正文。
   const DEBUG = true;
-  const SCRIPT_VERSION = '1.0.9';
+  const SCRIPT_VERSION = '2.0.0';
   function debug(stage, data = {}, level = 'info') {
     if (DEBUG) console[level](`[网页→Multica] ${stage}`, data);
   }
@@ -1092,7 +1092,8 @@
   const hasGMStorage = typeof GM_getValue === 'function' && typeof GM_setValue === 'function';
   const hasNativeStorage = typeof window.FastlaneNativeStorage?.getValue === 'function' &&
     typeof window.FastlaneNativeStorage?.setValue === 'function';
-  const nativeStorageNamespace = 'local.bugdone.multica';
+  const nativeStorageNamespace = 'local.site.multica'; // 与 @namespace 保持一致。
+  // Keep persisted keys and business identities stable across the project rename.
   const storagePrefix = 'bugdone-multica:';
   let storageMode = '网页本地存储';
   let storageFailed = false;
@@ -1104,9 +1105,18 @@
       catch (e) { debug('油猴存储读取失败，尝试网页存储', { errorType: e.name }, 'warn'); }
     }
     if (hasNativeStorage) {
-      try { const value = window.FastlaneNativeStorage.getValue(nativeStorageNamespace, storageKey, undefined);
-        if (value !== undefined) { storageMode = 'Fastlane 原生脚本存储'; return value; }
-      } catch (e) { debug('原生脚本存储读取失败，尝试网页存储', { errorType: e.name }, 'warn'); }
+      for (const namespace of [nativeStorageNamespace, 'local.bugdone.multica']) {
+        try {
+          const value = window.FastlaneNativeStorage.getValue(namespace, storageKey, undefined);
+          if (value !== undefined) {
+            if (namespace !== nativeStorageNamespace) {
+              try { window.FastlaneNativeStorage.setValue(nativeStorageNamespace, storageKey, value); }
+              catch (e) { debug('旧原生存储迁移未完成', { errorType:e.name }, 'warn'); }
+            }
+            storageMode = 'Fastlane 原生脚本存储'; return value;
+          }
+        } catch (e) { debug('原生脚本存储读取失败，尝试回退', { errorType: e.name }, 'warn'); }
+      }
     }
     try { const raw = window.localStorage.getItem(storageKey); if (raw !== null) {
       const value = JSON.parse(raw);

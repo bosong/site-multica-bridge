@@ -46,3 +46,27 @@ test('Mac 原生脚本存储在不同站点共享配置并迁移站点旧值', (
   assert.deepEqual(shared.get('bugdone-multica:config'), legacy);
   assert.deepEqual(make({}).readValue('config', null), legacy);
 });
+
+test('改名后原生读写使用新 namespace；旧网站本地配置可迁入新空间', () => {
+  const values=new Map(), namespace='local.site.multica', legacy={api:'https://api.multica.ai',token:'synthetic-token'};
+  const native={getValue:(scope,key,fallback)=>scope===namespace && values.has(key)?values.get(key):fallback,
+    setValue:(scope,key,value)=>{assert.equal(scope,namespace);values.set(key,value);}};
+  const window={FastlaneNativeStorage:native,localStorage:{getItem:key=>key==='bugdone-multica:config'?JSON.stringify(legacy):null,setItem:()=>{}},sessionStorage:{getItem:()=>null,setItem:()=>{}}};
+  const storage=new Function('window','debug',`${storageCode}\nreturn {readValue,writeValue};`)(window,()=>{});
+  assert.deepEqual(storage.readValue('config',null),legacy);
+  assert.deepEqual(values.get('bugdone-multica:config'),legacy);
+  storage.writeValue('config',{...legacy,label:'new'});
+  assert.equal(values.get('bugdone-multica:config').label,'new');
+});
+
+test('桥已暴露旧 namespace 时迁移旧值，已有新值始终优先', () => {
+ const legacy={api:'https://api.multica.ai',token:'synthetic-token'},current={...legacy,label:'current'};
+ const scopes=new Map([['local.bugdone.multica',new Map([['bugdone-multica:config',legacy]])],['local.site.multica',new Map()]]);
+ const native={getValue:(scope,key,fallback)=>scopes.get(scope)?.get(key)??fallback,setValue:(scope,key,value)=>scopes.get(scope).set(key,value)};
+ const window={FastlaneNativeStorage:native,localStorage:{getItem:()=>null,setItem:()=>{}},sessionStorage:{getItem:()=>null,setItem:()=>{}}};
+ const storage=new Function('window','debug',`${storageCode}\nreturn {readValue};`)(window,()=>{});
+ assert.deepEqual(storage.readValue('config',null),legacy);
+ assert.deepEqual(scopes.get('local.site.multica').get('bugdone-multica:config'),legacy);
+ scopes.get('local.site.multica').set('bugdone-multica:config',current);
+ assert.deepEqual(storage.readValue('config',null),current);
+});

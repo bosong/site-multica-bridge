@@ -1,53 +1,84 @@
-# BugDone → Multica Bridge
+# Site → Multica Bridge
 
-一个油猴脚本，将网页中的问题信息整理成 Multica 任务并指派给智能体。已发布版本面向 BugDone；本地开发分支正在加入友盟 APM、声明式站点配置与任意 HTTPS 网页手动选取，支持 Mac App WebView 的 Fastlane 原生网络桥。
+将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v2.0.0** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
 
-多站点配置捕获、友盟崩溃分析和任意网页手动选取的远期需求与实施步骤见[设计文档](./doc/dynamic-capture-design.md)。
+## 界面预览
 
-> 本地 `feat/multisite-capture` 分支正在实现多站点版本，尚未发布到 GitHub。进度与验收门槛见[实施计划](./doc/multisite-implementation-plan.md)，声明式配置格式见[站点配置指南](./doc/site-profile-guide.md)。主分支安装地址目前仍是 v1.0.9；完成全部阶段与 Mac App 联调前不会推送或打发布 tag。
+![五栏工作台与站点捕获配置示意](./assets/site-profiles-preview.png)
 
-开发分支的工作台新增「信息捕获」与独立的「站点捕获配置」Tab。配置页列出内置 BugDone、友盟 APM、GitHub Issues 三份可编辑规则，并提供合成模板和逐字段说明。自定义站点可把响应文本、数组图片与独立 CDN 图片映射成任务附件，支持默认标签、正文模板、动态启停和上一版回滚；Mac App 的新版网络桥可分块传送大于 1 MiB 的本地附件，仍需编译运行后联调。以下预览图展示的是已发布版界面，开发分支的五栏界面将于验收后更新截图。
+当前工作台包含「信息捕获」「AI任务创建」「处理列表」「设置」「站点捕获配置」五栏。下方两张展示任务创建与侧边栏设置的历史界面；功能布局以当前五栏工作台为准。预览均由脚本绘制，任务、项目、智能体和链接均为合成数据。
 
-![BugDone 接入 Multica 的界面预览](./assets/ui-preview.png)
+![任务创建界面示意](./assets/ui-preview.png)
 
-![侧边栏与 UI 设置预览](./assets/sidebar-preview.png)
+![侧边栏与 UI 设置示意](./assets/sidebar-preview.png)
 
-![开发版五栏工作台的站点捕获配置示意](./assets/site-profiles-preview.png)
+## 安装与升级
 
-*界面预览由脚本生成。任务标题、描述、项目、智能体和来源链接均为虚构演示数据；第三张展示开发版配置页，其余两张是已发布版。设置中可切换侧边栏抽屉与浮窗模式；桌面宽度下，抽屉打开时会收窄网页内容，关闭后恢复。打开或关闭任务面板的快捷键默认为 Ctrl + Shift + M，可在 UI 设置中修改或恢复默认。升级时旧默认 Alt + Shift + M 会迁移；其他自定义组合会保留。*
+1. [安装 v2.0.0 用户脚本](https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js)，或从 [v2.0.0 Release](https://github.com/bosong/site-multica-bridge/releases/tag/v2.0.0) 下载。
+2. 在油猴中启用脚本并刷新目标网页，点击 **Multica-AI** 入口。按钮显示未配置、待连接、连接中、已连接或连接失败。
+3. 在「设置 → 基础配置」选择官方 API 或添加自建服务器，填写 API Token 并连接。工作区、项目、智能体与标签会缓存，Token 变化、缓存缺失或手动刷新时重新读取目录。
+4. 设置默认工作区、项目、智能体和可选标签。项目、标签和日期可以留空；明确清空的默认选项不会在刷新后自动选回第一项。未填写完整连接信息时也可先保存设置。
+5. 在「信息捕获」核对来源、标题、内容与附件，点击底部固定的 **下一步：AI任务创建**。第二栏的最终标题、描述和任务选项就是提交值。
 
-## 安装
+v2.0.0 的脚本名称为「Site 接入 Multica」，`@namespace` 改为 `local.site.multica`，`@description` 为「多站点信息捕获与 Multica 智能体任务桥接」，更新与下载 URL 指向新仓库。安装文件名仍为 `bugdone-multica.user.js`，使旧路径在仓库改名后仍能找到发布物；内部存储键和 BugDone 查重标记保持兼容，不随项目改名重置。
 
-1. 从 [脚本安装地址](https://raw.githubusercontent.com/bosong/bugdone-multica-bridge/main/bugdone-multica.user.js) 安装 v1.0.9 到 Tampermonkey，打开并登录 BugDone。若已安装的旧版不含 `@updateURL`，需手动安装一次；之后可检查更新。
-2. 打开某个 Bug 详情，点击右下角 **Multica-AI** 入口按钮；按钮文字会显示当前连接状态。
-3. 在设置的 API 服务下拉框中选择官方服务，或选择“添加自建服务器”后填写地址；再填写 API Token。脚本会自动读取并缓存工作区、项目、智能体和标签。以后启动直接恢复缓存，只有缓存缺失、Token 变化或手动刷新时才请求这些列表。
-4. 在 Bug 详情核对捕获内容，点击固定在面板底部的 **下一步：AI任务创建**，编辑任务标题、描述、状态、优先级、智能体、项目、标签或有效日期，然后创建任务。第一栏生成的标题以 `[BugDone] #编号` 开头，并在末尾带有用于查重的 Bug ID 标记。第二栏显示的标题和描述会原样提交；若删掉标题中的查重标记，脚本会阻止提交并提示重新生成。
+升级时建议在原有脚本编辑器中全选覆盖并保存，再刷新网页；不要同时启用新旧两份脚本。脚本管理器若把新名称/namespace 视为独立安装，其私有存储可能无法自动沿用，需要重新填写连接配置或导入已导出的站点规则。Mac 原生存储改用新 namespace；当原生桥已提供旧 namespace 数据时会迁移，当前网站旧本地值也会迁入新空间。桥未提供旧空间且没有本地副本时，需要重新配置，脚本不会绕过宿主的存储隔离。
 
-面板右上角的 **打开 Multica** 会尝试唤起已安装的 Multica 桌面程序；未检测到成功切换时打开 [Multica 官网](https://multica.ai)。FastlaneTool 内置 WebView 需要包含 `multica://` 外部协议转发的新版宿主程序。
+## 站点捕获
 
-入口按钮按最近一次 API 验证结果显示 **未配置、待连接、连接中、已连接、连接失败**。已保存选项在启动时仍从本地恢复，同时用 `GET /api/me` 验证令牌；不会因此重新拉取项目、智能体和标签列表。
+| 来源 | 捕获方式 | 附件与来源动作 |
+| --- | --- | --- |
+| BugDone | 观察已声明 BugAPI 的列表和详情响应 | 截图默认压缩，可切换原图；可配置新建成功后将待处理问题改为处理中 |
+| 友盟 APM | 观察崩溃列表、详情、错误明细、行为日志和堆栈接口 | 堆栈默认精简 TXT，可切换完整版；提示已加载日志覆盖数量 |
+| GitHub Issues | 以同源 GET 和 JSON 响应读取列表/详情 | 按仓库与 Issue 编号核对来源，保留正文 Markdown |
+| 其他已配置网站 | 按 JSON 规则匹配页面、接口和字段 | 可配置文本、数组图片及独立 CDN 附件；新协议仍需可信适配器 |
+| 未配置 HTTPS 网页 | 用户主动选取可见文字，或手动填写 | 不自动监听网络；仅对当前草稿防重复，以指纹提示可能重复 |
 
-脚本会先查找同一 Bug 的已有任务，避免重复创建。BugDone 截图默认生成压缩版供预览和上传，可在「信息捕获」切换原图；压缩失败时不会暗中上传原图。新任务创建时通过 `attachment_ids` 关联选中的截图，读取或上传失败会停止创建并显示原因。非图片附件目前只作为原始链接写入任务描述。友盟崩溃堆栈默认生成精简 TXT（最多两种堆栈、每种前 40 行）；需要完整原文时可在「信息捕获」切换完整版，再核对待上传附件。
+友盟从 `/error_analysis` 自动跳转到 `/crash` 时同步安装捕获，避免首个列表请求漏接；SPA 路由切换也会隔离旧页面的迟到响应。已配置站点可以选择「不关联问题 · 手动填写」，无需先捕获记录也能进入下一步。关联了问题的自动任务仍要求详情，避免把列表摘要当作完整内容。
 
-站点配置的 `defaultLabel` 可选继承全局、明确不带标签或指定绑定服务/工作区的标签，任务创建页的最后选择优先。默认标签会预填到新任务，并通过创建请求的 `label_ids` 提交；若创建响应提供标签列表，脚本会核对所选标签，缺失时给出警告。查重后复用的已有任务不会自动补上新设置的默认标签。
+「站点捕获配置」提供内置规则编辑、启停、恢复、JSON 导入/导出、合成样本试运行、变更范围提示和上一版回滚。扩大观察范围的配置更新会停用，需核对后重新启用。配置只声明规则，不接受任意 JavaScript、Cookie、令牌或任意写接口。
 
-Multica 新任务创建成功后，脚本会重新读取 BugDone 详情；若仍是“待处理”，调用 BugDone 原生接口将其改为“处理中”，再读取一次确认。已处于其他状态时不覆盖；复用已有 Multica 任务时也不自动改动 BugDone。状态同步失败只提示核对，不会把已创建的 Multica 任务误报为创建失败。
+配置说明与参考：
 
-“处理列表”会在打开时查询 Multica 任务的最新状态，并在每条记录底部显示。已有任务 ID 时直接查询；旧记录缺少 ID 时通过 BugDone 查重标记搜索。列表提供“刷新状态”按钮；不同 API 服务或工作区的记录需要切换回提交时的配置才能查询。
+- [配置字段指南](./doc/site-profile-guide.md)
+- [BugDone JSON](./doc/site-profiles/bugdone.json)
+- [友盟 APM JSON](./doc/site-profiles/umeng-apm-crash.json)
+- [GitHub Issues JSON](./doc/site-profiles/github-issues.json)
+- [自定义站点模板](./doc/site-profiles/example-issues.json)与[合成响应](./doc/site-profiles/example-response.json)
+- [设计基线](./doc/dynamic-capture-design.md)、[实施记录](./doc/multisite-implementation-plan.md)与[验收记录](./doc/local-acceptance.md)
 
-## Mac App WebView
+## 创建任务与处理列表
 
-没有 `GM_xmlhttpRequest` 时，脚本优先使用 `FastlaneNativeNetwork`。Mac App 需安装支持 `sourceUrl` 图片转传的新版原生网络桥，且脚本元数据必须包含 `@fastlane-network`、Multica API 主机和 `img.bugdone.cn` 的 `@connect` 声明。旧版 App 回退到网页 `fetch`，可能因 CORS 无法提交。
+- 创建顺序为：核验本地任务关联 → 分页精确查重 → 准备和上传附件 → 创建并指派任务。搜索失败或结果不确定时停止创建；超时后先核验，避免重复 POST。
+- BugDone 保留旧 `[BugDone:<ID>]` 标记与缓存兼容；其他配置站点使用稳定的来源键和可见标记。删除可靠查重所需标记会阻止自动提交。手动任务没有业务 ID，不承诺跨设备强查重。
+- 回形针支持选择本地文件；捕获与本地附件显示为可预览、可移除的条目。图片和 TXT 可点击查看；上传成功后通过 `attachment_ids` 关联，描述中的 URL 用于来源参考。读取或上传失败会停止创建。
+- 友盟精简 TXT 默认最多两种堆栈、每种前 40 行；未打开的明细不会自动补齐。BugDone 压缩失败时提示错误，不暗中上传原图。
+- 默认标签支持继承全局、不带标签或指定绑定 API/工作区的标签；任务创建页最后选择优先。标签通过 `label_ids` 提交，创建响应允许核对时会检查结果；复用已有任务不会自动补标签。
+- BugDone 的 `postActions` 可关闭。启用时仅在新建 Multica 任务成功后重读问题状态，仍为待处理才更新为处理中并确认；复用已有任务或其他状态不会覆盖。回写失败单独提示，不把已创建任务误报为失败。
+- 「处理列表」最多保留 100 条，第 101 条淘汰最旧记录。可手动删除记录、查询或刷新 Multica 最新状态；切换到对应 API/工作区后才能查询其他环境的任务。
+- 「继续创建」会在本次成功后清空表单，方便输入下一项任务；智能体实际执行状态请到 Multica 查看。
 
-自建 Multica API 需要在脚本头部添加对应的 `@connect` 主机名，再重新安装或加载脚本。不要在仓库、截图或 Issue 中提交 PAT、Cookie 或 BugDone 私有数据。
+## UI 与桌面程序
+
+在 UI 设置中可切换侧边栏抽屉与浮窗，入口按钮可拖动。抽屉打开时推开原网页及配置的详情容器，关闭后恢复；默认快捷键 **Ctrl + Shift + M**，可修改或恢复默认。页面拥有键盘事件时可切换面板；焦点在浏览器地址栏等浏览器界面时，用户脚本无法接收快捷键。
+
+「打开 Multica」尝试唤起已安装的桌面程序，未检测到切换时打开 [Multica 官网](https://multica.ai)。FastlaneTool 需支持 `multica://` 外部协议转发。
+
+## Mac App WebView 与权限
+
+没有 `GM_xmlhttpRequest` 时优先使用 `FastlaneNativeNetwork`；没有油猴存储时优先使用 `FastlaneNativeStorage`，再回退到当前网站的本地/会话存储。网页存储受站点隔离，跨站共享配置需要油猴存储或新版原生共享存储桥。
+
+FastlaneTool 需提供与 `@fastlane-network`、`@fastlane-storage` 对应的原生桥，并按启用脚本的 `@connect` 授权网络目标。新版桥支持图片转传与大文件分块；旧桥对大于 1 MiB 的本地附件会提示更新。缺少桥时的网页 `fetch` 仍受目标 API 的 CORS 限制。FastlaneTool 原生代码位于独立项目，不包含在此脚本发布包中。
+
+脚本在 HTTPS 网页显示入口（`@match https://*/*`）；只有启用且匹配页面的配置才观察指定接口。`@connect *` 用于用户选择的自建 Multica 服务和配置附件域，实际捕获与图片读取仍受配置校验。请勿在仓库、截图或 Issue 中提交 Token、Cookie、私有问题或日志。
 
 ## 本地检查
 
-需要 Node.js，无第三方依赖：
+项目目录名为 `site-multica-bridge`。需要 Node.js，无第三方运行依赖，也无需构建：
 
 ```sh
 npm run check
 npm test
 ```
 
-任务创建成功只表示已提交并指派；智能体的实际执行状态请到 Multica 查看。已创建任务不会因再次点击提交而重新触发。
+v2.0.0 发布检查：102 项自动化测试通过；Ego Lite 已验证 BugDone 列表、友盟列表及自动跳转、GitHub 列表/详情和隔离世界捕获。2026-10-27 用户确认全部验收完成。版本变化见 [CHANGELOG](./CHANGELOG.md)。
