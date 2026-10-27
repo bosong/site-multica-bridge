@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 2,
+  "metadata": {
+    "name": "示例问题站点"
+  },
+  "defaultLabel": {
+    "mode": "inherit"
+  },
+  "id": "example-issues",
+  "version": 1,
+  "enabled": false,
+  "allowedOrigins": [
+    "https://issues.example.test"
+  ],
+  "pages": [
+    {
+      "kind": "list",
+      "path": "/issues"
+    },
+    {
+      "kind": "detail",
+      "path": "/issues/:id"
+    }
+  ],
+  "captures": [
+    {
+      "id": "issues",
+      "method": "POST",
+      "origin": "https://issues.example.test",
+      "path": "/api/issues",
+      "maxResponseBytes": 1000000,
+      "success": {
+        "path": "$.ok",
+        "equals": true
+      },
+      "variants": [
+        {
+          "kind": "list",
+          "path": "$.data.items",
+          "type": "array"
+        },
+        {
+          "kind": "detail",
+          "path": "$.data.issue",
+          "type": "object"
+        }
+      ]
+    }
+  ],
+  "record": {
+    "scopeId": "$.projectId",
+    "recordId": "$.id",
+    "title": "$.title",
+    "number": "$.number",
+    "descriptionHtml": "$.description"
+  },
+  "draft": {
+    "titleTemplate": "[Example] #{{number}} {{title}}"
+  },
+  "dedup": {
+    "keyTemplate": "example-issues:{{scopeId}}:{{recordId}}"
+  },
+  "attachments": [
+    {
+      "id": "stack",
+      "kind": "text",
+      "path": "$.stack",
+      "filenameTemplate": "issue-{{recordId}}-stack.txt",
+      "maxChars": 200000
+    },
+    {
+      "id": "screen",
+      "kind": "image-url",
+      "path": "$.screenshot",
+      "filenameTemplate": "issue-{{recordId}}.png"
+    }
+  ],
+  "postActions": []
+}

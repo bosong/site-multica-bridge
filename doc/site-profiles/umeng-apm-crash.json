@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 2,
+  "id": "umeng-apm-crash",
+  "version": 2,
+  "enabled": false,
+  "metadata": {
+    "name": "友盟 APM"
+  },
+  "adapter": "umeng",
+  "defaultLabel": {
+    "mode": "inherit"
+  },
+  "presentation": {
+    "recordLabel": "选择崩溃记录"
+  },
+  "processors": {
+    "stack": {
+      "maxStacks": 2,
+      "maxLines": 40,
+      "maxChars": 4000
+    }
+  },
+  "allowedOrigins": [
+    "https://apm.umeng.com"
+  ],
+  "pages": [
+    {
+      "kind": "list",
+      "path": "/platform/:appId/error_analysis/crash"
+    },
+    {
+      "kind": "detail",
+      "path": "/platform/:appId/error_analysis/crash/detail/:errorId"
+    }
+  ],
+  "captures": [
+    {
+      "id": "umeng-error-list",
+      "method": "POST",
+      "origin": "https://apm.umeng.com",
+      "path": "/hsf/analysis/errorList",
+      "maxResponseBytes": 4000000,
+      "requestKeys": [
+        "dataSourceId"
+      ],
+      "success": {
+        "path": "$.code",
+        "equals": 200
+      },
+      "variants": [
+        {
+          "kind": "list",
+          "path": "$.data.list",
+          "type": "array"
+        }
+      ]
+    },
+    {
+      "id": "umeng-error-detail",
+      "method": "POST",
+      "origin": "https://apm.umeng.com",
+      "path": "/hsf/analysis/errorDetail",
+      "maxResponseBytes": 4000000,
+      "requestKeys": [
+        "dataSourceId",
+        "errorId"
+      ],
+      "success": {
+        "path": "$.code",
+        "equals": 200
+      },
+      "variants": [
+        {
+          "kind": "detail",
+          "path": "$.data",
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "id": "umeng-log-list",
+      "method": "POST",
+      "origin": "https://apm.umeng.com",
+      "path": "/hsf/analysis/errorlogList",
+      "maxResponseBytes": 4000000,
+      "requestKeys": [
+        "dataSourceId",
+        "errorId"
+      ],
+      "success": {
+        "path": "$.code",
+        "equals": 200
+      },
+      "variants": [
+        {
+          "kind": "list",
+          "path": "$.data.list",
+          "type": "array"
+        }
+      ]
+    },
+    {
+      "id": "umeng-log-detail",
+      "method": "POST",
+      "origin": "https://apm.umeng.com",
+      "path": "/hsf/analysis/errorlogDetail",
+      "maxResponseBytes": 4000000,
+      "requestKeys": [
+        "dataSourceId",
+        "errorId",
+        "logId"
+      ],
+      "success": {
+        "path": "$.code",
+        "equals": 200
+      },
+      "variants": [
+        {
+          "kind": "detail",
+          "path": "$.data",
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "id": "umeng-error-stack",
+      "method": "POST",
+      "origin": "https://apm.umeng.com",
+      "path": "/hsf/analysis/errorStack",
+      "maxResponseBytes": 4000000,
+      "requestKeys": [
+        "key"
+      ],
+      "success": {
+        "path": "$.code",
+        "equals": 200
+      },
+      "variants": [
+        {
+          "kind": "detail",
+          "path": "$.data",
+          "type": "object"
+        }
+      ]
+    }
+  ],
+  "record": {
+    "scopeId": "$.__scopeId",
+    "recordId": "$.id",
+    "title": "$.summary",
+    "number": "$.id"
+  },
+  "draft": {
+    "titleTemplate": "[友盟崩溃] #{{recordId}} {{title}}"
+  },
+  "dedup": {
+    "keyTemplate": "umeng-apm-crash:{{scopeId}}:{{recordId}}"
+  },
+  "attachments": [],
+  "postActions": []
+}

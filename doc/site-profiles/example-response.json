@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "data": {
+    "issue": {
+      "projectId": "demo-project",
+      "id": "42",
+      "number": 42,
+      "title": "演示：登录失败提示",
+      "description": "<p>使用模拟账号触发测试错误，检查提示。</p>",
+      "stack": "SyntheticError: example\n at Demo.handle (demo.js:42)",
+      "screenshot": "https://issues.example.test/files/demo.png"
+    }
+  }
+}
