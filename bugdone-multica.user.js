@@ -2690,6 +2690,21 @@
     if (!hasGMStorage) message('当前使用网页本地存储保存配置和处理列表。');
     if (storageFailed) message('浏览器存储不可用，请允许当前网站保存数据后刷新。');
     debug('界面挂载完成', { buttonConnected: host.isConnected, capturedBugs: bugs.size });
+    requestAnimationFrame(() => {
+      const rect = launch.getBoundingClientRect(), style = getComputedStyle(launch);
+      const inViewport = rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
+      const visible = launch.isConnected && rect.width > 0 && rect.height > 0 && inViewport &&
+        style.display !== 'none' && style.visibility === 'visible' && Number(style.opacity) > 0;
+      const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
+      const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
+      const topElement = visible ? document.elementFromPoint(x, y) : null;
+      const covered = visible && topElement !== host && topElement !== launch;
+      debug(visible && !covered ? '入口已显示' : '入口未显示或被遮挡', {
+        buttonConnected: launch.isConnected, visible, inViewport, covered,
+        position: { left: Math.round(rect.left), top: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height) },
+        zIndex: style.zIndex, connectionState: connectionPhase
+      }, visible && !covered ? 'info' : 'warn');
+    });
     if (config.token && config.api) void run(connectIfNeeded);
   }
   function mountWithDiagnostics() {
