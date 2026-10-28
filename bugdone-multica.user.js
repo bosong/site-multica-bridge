@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site 接入 Multica
 // @namespace    local.site.multica
-// @version      2.2.1
+// @version      2.3.0
 // @description  多站点信息捕获与 Multica 智能体任务桥接
 // @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
 // @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
@@ -679,6 +679,33 @@
     }
     return '';
   }
+  function processingPageSite(url, profiles) {
+    const parsed=locationOf(url);
+    if(!parsed || parsed.protocol!=='https:') return {key:'unknown',label:'未识别来源'};
+    const candidates=profiles.map(p=>({...p,enabled:true}));
+    const profile=selectSiteProfile(profiles,url) || selectSiteProfile(candidates,url)
+      || profiles.find(p=>p.enabled && p.allowedOrigins.includes(parsed.origin)) || candidates.find(p=>p.allowedOrigins.includes(parsed.origin));
+    return profile ? {key:`profile:${profile.id}`,label:profile.metadata?.name || profile.id}
+      : {key:`origin:${parsed.origin}`,label:parsed.hostname};
+  }
+  function processingItemSite(item, profiles) {
+    const id=item.captureSiteId || (item.siteId && item.siteId!=='manual' ? item.siteId : '')
+      || (item.bugId ? 'bugdone' : profiles.find(p=>item.sourceKey?.startsWith(p.id+':'))?.id);
+    if(id) return {key:`profile:${id}`,label:profiles.find(p=>p.id===id)?.metadata?.name || item.captureSiteName || id};
+    return processingPageSite(submittedSourceUrl(item),profiles);
+  }
+  function processingSiteView(items, profiles, url, selection, previousPageKey) {
+    const page=processingPageSite(url,profiles),options=new Map([['all',{key:'all',label:'全部站点',count:items.length}]]);
+    for(const profile of profiles) options.set(`profile:${profile.id}`,{key:`profile:${profile.id}`,label:profile.metadata?.name || profile.id,count:0});
+    if(!options.has(page.key)) options.set(page.key,{...page,count:0});
+    const grouped=items.map(item=>({item,site:processingItemSite(item,profiles)}));
+    for(const {site} of grouped) {
+      if(!options.has(site.key)) options.set(site.key,{...site,count:0});
+      options.get(site.key).count++;
+    }
+    const selected=previousPageKey===page.key && options.has(selection) ? selection : page.key;
+    return {pageKey:page.key,selected,options:[...options.values()],items:grouped.filter(x=>selected==='all' || x.site.key===selected).map(x=>x.item)};
+  }
   function draftSourceDetailUrl(draft) {
     const profile=draft.profile || BUILTIN_PROFILES.find(p=>p.id===draft.siteId);
     const detailUrl=profile ? profileShareUrl(profile,{siteId:draft.siteId,scopeId:draft.scopeId,
@@ -1176,7 +1203,7 @@
   }
   // 调试桩：仅打印阶段、数量和 HTTP 状态，不打印令牌、请求头或 Bug 正文。
   const DEBUG = true;
-  const SCRIPT_VERSION = '2.2.1';
+  const SCRIPT_VERSION = '2.3.0';
   function debug(stage, data = {}, level = 'info') {
     if (DEBUG) console[level](`[网页→Multica] ${stage}`, data);
   }
@@ -1277,6 +1304,7 @@
   let submittedBugs = [];
   const processingStates = new WeakMap(), processingRows = new Map();
   let processingRefreshPromise = null, processingRefreshAt = 0, processingRefreshContext = '';
+  let processingSiteSelection='', processingPageKey='';
   let launchPosition = readValue('launchPosition', null);
   const savedConfig = readValue('config', null);
   config = normalizeShortcutConfig({ ...config, ...(savedConfig || {}) });
@@ -1304,6 +1332,8 @@
   function rememberSubmittedDraft(draft, issue, c) {
     const identity = draft.sourceKey || `manual:${draft.draftId}`;
     const item = { siteId: draft.siteId, sourceKey: identity, fingerprint: draft.fingerprint || '',
+      captureSiteId:draft.profile?.id || draft.captureProfile?.id || (draft.siteId!=='manual' ? draft.siteId : ''),
+      captureSiteName:draft.profile?.metadata?.name || draft.captureProfile?.metadata?.name || '',
       ...(draft.legacyBug ? {bugId:draft.legacyBug.BugId,bugCode:draft.legacyBug.BugCode} : {}),
       title: draft.title, issueId: issue.id, sourceUrl:draft.sourceUrl || '', detailUrl:draftSourceDetailUrl(draft),
       identifier: issue.identifier || '', issueTitle: issue.title || '', submittedAt: new Date().toISOString(),
@@ -1316,7 +1346,8 @@
     return item;
   }
   function forgetSubmitted(item) {
-    submittedBugs = submittedBugs.filter(x => x !== item && !((x.sourceKey || x.bugId) === (item.sourceKey || item.bugId) && x.workspace === item.workspace));
+    const identity=item.sourceKey || item.bugId;
+    submittedBugs = submittedBugs.filter(x => x !== item && !(identity && (x.sourceKey || x.bugId) === identity && x.workspace === item.workspace && (x.api || '') === (item.api || '')));
     try { writeValue('submittedBugs', submittedBugs); } catch (e) { debug('已处理列表删除失败', { errorType: e.name }, 'warn'); }
   }
   const hiddenSiteElements=new Map();
@@ -1374,6 +1405,7 @@
       panel.getBoundingClientRect();
       panel.dataset.open = 'true';
     }
+    if(!$('view-processing').hidden) {renderProcessing();void refreshProcessingStatuses();}
   }
   function closePanel() {
     closeAttachmentPreview();
@@ -1506,6 +1538,7 @@
     }
     activeProfile=profile;siteMode=profile?.captureMode && profile.captureMode!=='api' ? 'manual' : profile?.adapter || (profile?'custom':'manual');
     syncCaptureUI();
+    if(root) {renderProcessing();if(!$('panel').hidden && !$('view-processing').hidden) void refreshProcessingStatuses();}
     if(!profile || profile.captureMode && profile.captureMode!=='api') return;
     const sourceUrl=location.href;
     const receive=(text,meta)=>{
@@ -2243,9 +2276,17 @@
   }
   function renderProcessing() {
     const list = $('processing-list'); if (!list) return; list.replaceChildren(); processingRows.clear();
-    $('processing-count').textContent = `共 ${submittedBugs.length} 条，最多保留 100 条`;
-    if (!submittedBugs.length) { const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = '还没有已提交给 Multica-AI 的 Bug。'; list.append(empty); return; }
-    for (const item of submittedBugs) {
+    const view=processingSiteView(submittedBugs,profileRegistry(),location.href,processingSiteSelection,processingPageKey);
+    processingSiteSelection=view.selected;processingPageKey=view.pageKey;
+    const select=$('processing-site');select.replaceChildren();
+    for(const option of view.options) {
+      const node=document.createElement('option');node.value=option.key;node.textContent=`${option.label}（${option.count}）`;select.append(node);
+    }
+    select.value=view.selected;
+    $('processing-count').textContent = `当前 ${view.items.length} 条 · 总计 ${submittedBugs.length}/100`;
+    $('refresh-processing').disabled=!view.items.length || !!processingRefreshPromise;
+    if (!view.items.length) { const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = '此站点暂无处理记录，可切换其他站点或全部站点查看。'; list.append(empty); return; }
+    for (const item of view.items) {
       const row = document.createElement('article'); row.className = 'processing-item';
       const time = new Date(item.submittedAt).toLocaleString('zh-CN', { hour12: false });
       row.innerHTML = `<div class="processing-main"><div class="processing-title"></div><div class="processing-meta"></div><div class="processing-status"></div></div><div class="processing-item-actions"><button class="text-button processing-delete">删除</button></div>`;
@@ -2276,23 +2317,24 @@
     else el.textContent = `Multica 状态：查询失败（${String(result.error?.message || '请稍后重试').slice(0, 90)}）`;
   }
   async function refreshProcessingStatuses(force = false) {
-    if (processingRefreshPromise) return processingRefreshPromise;
-    if (!submittedBugs.length) return;
+    if (processingRefreshPromise) {await processingRefreshPromise;return refreshProcessingStatuses(force);}
+    const visible=[...processingRows.keys()],site=processingSiteSelection;
+    if (!visible.length) return;
     let c;
     try { c = settings(); }
     catch (_) { processingRows.forEach(el => { delete el.dataset.kind; el.textContent = 'Multica 状态：请先完成 API 和工作区配置'; }); return; }
     const context = `${c.api}:${c.workspace}:${connectionCacheTag(c.api, c.token)}`;
-    if (!force && processingRefreshContext === context && Date.now() - processingRefreshAt < 60000) return;
+    if (!force && processingRefreshContext === `${context}:${site}` && Date.now() - processingRefreshAt < 60000) return;
     $('refresh-processing').disabled = true;
     processingRows.forEach(el => { delete el.dataset.kind; el.textContent = 'Multica 状态：查询中…'; });
-    processingRefreshPromise = loadSubmittedStatuses([...submittedBugs], c, request(c), (item, result) => {
+    processingRefreshPromise = loadSubmittedStatuses(visible, c, request(c), (item, result) => {
       processingStates.set(item, { context, result });
       const el = processingRows.get(item);
-      if (el && el.isConnected && `${$('api').value}:${$('workspace').value}:${connectionCacheTag($('api').value, $('token').value)}` === context)
+      if (el && el.isConnected && processingSiteSelection===site && `${$('api').value}:${$('workspace').value}:${connectionCacheTag($('api').value, $('token').value)}` === context)
         setProcessingStatus(el, result);
     }).finally(() => {
-      processingRefreshAt = Date.now(); processingRefreshContext = context;
-      processingRefreshPromise = null; $('refresh-processing').disabled = false;
+      processingRefreshAt = Date.now(); processingRefreshContext = `${context}:${site}`;
+      processingRefreshPromise = null; $('refresh-processing').disabled = !processingRows.size;
     });
     return processingRefreshPromise;
   }
@@ -2318,7 +2360,7 @@
       #panel{position:fixed;right:24px;top:24px;bottom:88px;width:min(680px,calc(100vw - 48px));z-index:2147483647;display:flex;flex-direction:column;background:#f7f8fc;border:1px solid #e1e5ee;border-radius:20px;box-shadow:0 20px 70px #1e293b35;overflow:hidden}
       header{display:flex;justify-content:space-between;align-items:center;padding:23px 24px 18px;background:#fff;gap:12px}.brand{display:flex;align-items:center;gap:12px}.brand-icon{width:42px;height:42px;padding:9px;border:1px solid #dbeafe;border-radius:13px;background:#eff6ff}.brand h2{font-size:19px;line-height:1.3;margin:0;letter-spacing:-.4px}.brand small{font-size:12px;color:#8993a3}.icon-button{background:#f4f5f8;color:#677489;font-size:22px;line-height:1;padding:8px 12px}.icon-button:hover{background:#e8eaf0}
       .tabs{display:flex;padding:0 24px;gap:20px;background:#fff;border-bottom:1px solid #e7eaf1;overflow-x:auto;scrollbar-width:thin}.tabs button{flex:none;border:0;border-bottom:3px solid transparent;border-radius:0;padding:13px 2px;color:#7c8697;background:transparent;white-space:nowrap}.tabs button[aria-selected=true]{color:#2563eb;border-bottom-color:#3b82f6}.tabs button:hover{color:#2563eb}
-      .content{overflow-y:auto;min-height:0;flex:1;overscroll-behavior:contain;padding:22px 24px}.section-intro{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}.eyebrow{font-size:11px;letter-spacing:1.6px;color:#9399aa;font-weight:700}.section-intro h3{margin:3px 0 0;font-size:17px;color:#273449}.badge{font-size:12px;padding:4px 9px;border-radius:20px;color:#2563eb;background:#eff6ff;white-space:nowrap}.empty{padding:30px 8px;text-align:center;color:#94a3b8}.processing-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #edf0f5}.processing-item:last-child{border-bottom:0}.processing-main{min-width:0;flex:1}.processing-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.processing-meta{margin-top:4px;color:#8791a3;font-size:12px;overflow-wrap:anywhere}.processing-status{margin-top:9px;padding-top:7px;border-top:1px solid #edf0f5;font-size:12px;color:#64748b}.processing-status[data-kind=ready]{color:#2563eb}.processing-status[data-kind=error]{color:#b45309}.processing-delete{flex:none}.processing-item-actions{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px}.processing-detail{text-decoration:none;white-space:nowrap;font-size:12px}.processing-detail:disabled{cursor:not-allowed}.processing-actions{display:flex;align-items:center;gap:12px}.success{position:fixed;left:50%;top:18%;transform:translate(-50%,-50%);z-index:2147483648;display:flex;align-items:center;gap:12px;min-width:290px;max-width:calc(100vw - 40px);padding:15px 18px;background:#fff;border:1px solid #bbf7d0;border-radius:14px;box-shadow:0 18px 55px #14532d30}.success-mark{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#22c55e;color:#fff;font-size:21px;font-weight:800}.success strong{display:block;color:#166534}.success-copy{display:block;margin-top:3px;color:#64748b;font-size:12px;white-space:pre-line}.success-pop{animation:success-pop .35s ease-out}@keyframes success-pop{0%{opacity:0;transform:translate(-50%,-65%) scale(.9)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+      .content{overflow-y:auto;min-height:0;flex:1;overscroll-behavior:contain;padding:22px 24px}.section-intro{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}.eyebrow{font-size:11px;letter-spacing:1.6px;color:#9399aa;font-weight:700}.section-intro h3{margin:3px 0 0;font-size:17px;color:#273449}.badge{font-size:12px;padding:4px 9px;border-radius:20px;color:#2563eb;background:#eff6ff;white-space:nowrap}.empty{padding:30px 8px;text-align:center;color:#94a3b8}.processing-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #edf0f5}.processing-item:last-child{border-bottom:0}.processing-main{min-width:0;flex:1}.processing-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.processing-meta{margin-top:4px;color:#8791a3;font-size:12px;overflow-wrap:anywhere}.processing-status{margin-top:9px;padding-top:7px;border-top:1px solid #edf0f5;font-size:12px;color:#64748b}.processing-status[data-kind=ready]{color:#2563eb}.processing-status[data-kind=error]{color:#b45309}.processing-delete{flex:none}.processing-item-actions{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px}.processing-detail{text-decoration:none;white-space:nowrap;font-size:12px}.processing-detail:disabled{cursor:not-allowed}.processing-heading{align-items:flex-end;flex-wrap:wrap}.processing-site-select{width:auto;max-width:245px;margin-top:6px;font-size:15px;font-weight:650;padding:8px 10px}.processing-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.processing-actions .badge{font-size:11px}.success{position:fixed;left:50%;top:18%;transform:translate(-50%,-50%);z-index:2147483648;display:flex;align-items:center;gap:12px;min-width:290px;max-width:calc(100vw - 40px);padding:15px 18px;background:#fff;border:1px solid #bbf7d0;border-radius:14px;box-shadow:0 18px 55px #14532d30}.success-mark{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#22c55e;color:#fff;font-size:21px;font-weight:800}.success strong{display:block;color:#166534}.success-copy{display:block;margin-top:3px;color:#64748b;font-size:12px;white-space:pre-line}.success-pop{animation:success-pop .35s ease-out}@keyframes success-pop{0%{opacity:0;transform:translate(-50%,-65%) scale(.9)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
       .card{padding:18px;border:1px solid #e5e8f0;background:#fff;border-radius:14px;margin-bottom:16px}.card-title{font-weight:650;margin:0 0 12px}.field{margin-top:16px}.field:first-child{margin-top:0}label{display:block;font-size:13px;font-weight:600;color:#46536a;margin:0 0 7px}input,select,textarea{width:100%;padding:10px 12px;border:1px solid #dce1ec;border-radius:9px;background:#fff;color:#273449;outline:none}input:focus,select:focus,textarea:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #3b82f612}textarea{resize:vertical;line-height:1.7;font-size:13px}input[readonly]{background:#f8f9fc;color:#64748b;font-size:12px}.hint,small{font-size:12px;line-height:1.7;color:#8791a3}.hint{margin:7px 0 0}.row{display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap}.row.end{justify-content:flex-end}.secondary{background:#fff;border-color:#dfe3ed;color:#526075}.secondary:hover{background:#f1f3f9}.text-button{padding:4px 0;background:transparent;color:#3b82f6;font-size:12px}.text-button:hover{background:transparent;color:#1d4ed8}.label-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}.label-row label{margin:0}
       .header-actions{display:flex;align-items:center;gap:8px}.header-actions .text-button{white-space:nowrap}.header-actions .icon-button{font-size:17px}.task-title{font-size:20px;font-weight:650;border:0;padding:8px 0}.task-description{min-height:250px;border:0;padding:8px 0;resize:vertical}.task-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.task-grid .field{margin:0}.settings-group{border-top:1px solid #edf0f5;padding-top:18px;margin-top:18px}.settings-group:first-child{border-top:0;padding-top:0;margin-top:0}.settings-group h4{margin:0 0 12px;font-size:14px}.inline-control{display:flex;gap:8px}.inline-control>*:first-child{flex:1;min-width:0}.inline-control button{white-space:nowrap}.link-note{padding:10px 12px;border:1px solid #e5e8f0;border-radius:9px;background:#f8f9fc;font-size:12px;color:#64748b;overflow-wrap:anywhere}@media(max-width:520px){.task-grid{grid-template-columns:1fr}.header-actions .text-button{font-size:11px}}
       .quick-card{padding:0;overflow:hidden}.quick-head,.quick-foot{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #e5e8f0}.quick-head strong{font-size:16px;color:#536078}.quick-head small{color:#9ca3af}.quick-body{padding:18px}.quick-body .task-title{font-size:23px;width:100%;border:0;border-bottom:1px solid #dce1ec;border-radius:0;box-shadow:none;padding-bottom:16px;margin-bottom:8px}.quick-body .task-title:focus{border-bottom-color:#60a5fa}.quick-body .task-description{min-height:205px;width:100%;border:0;box-shadow:none}.quick-source{display:flex;justify-content:space-between;gap:10px;padding:12px;border:1px solid #e5e8f0;background:#f6f7f9;border-radius:9px;font-size:12px;color:#667085}.quick-source strong{color:#344054}.quick-assignee{display:flex;align-items:center;gap:10px;margin:14px 0;color:#667085}.quick-avatar{display:grid;place-items:center;width:31px;height:31px;border-radius:50%;background:#eceff2;color:#4b5563;font-weight:700}.quick-options{display:flex;flex-wrap:wrap;gap:8px}.quick-options select,.quick-options .more-button{width:auto;max-width:230px;border-radius:24px;padding:9px 12px;font-size:12px}.quick-dates{margin-top:14px;border-top:1px solid #edf0f5;padding-top:12px}.quick-dates summary{font-size:12px;color:#667085;cursor:pointer}.quick-foot{border-top:1px solid #e5e8f0;border-bottom:0;gap:8px;flex-wrap:wrap}.quick-foot label{display:flex;align-items:center;gap:6px;margin:0;font-weight:400;font-size:12px}.quick-foot input{width:17px;height:17px;accent-color:#2563eb}.quick-foot .submit{width:auto;margin:0}.quick-foot .text-button{font-size:20px}.custom-server-panel{margin-top:10px;padding:12px;border:1px solid #e5e8f0;border-radius:9px;background:#f8f9fc}
@@ -2403,7 +2445,7 @@
 </dl></details></div></div>
           </section>
           <section id="view-processing" role="tabpanel" aria-labelledby="tab-processing" hidden>
-            <div class="section-intro"><div><div class="eyebrow">LOCAL HISTORY</div><h3>处理列表</h3></div><div class="processing-actions"><button id="refresh-processing" class="text-button" type="button">刷新状态</button><span id="processing-count" class="badge">共 0 条</span></div></div>
+            <div class="section-intro processing-heading"><div><div class="eyebrow">处理列表 · 按来源站点</div><select id="processing-site" class="processing-site-select" aria-label="处理列表站点"></select></div><div class="processing-actions"><button id="refresh-processing" class="text-button" type="button">刷新状态</button><span id="processing-count" class="badge">共 0 条</span></div></div>
             <div class="card"><p class="hint">这里记录本浏览器中已提交给 Multica-AI 的 Bug。打开本栏会查询任务状态；删除只移除本地记录，不会删除 Multica 任务。</p><div id="processing-list"></div></div>
           </section>
         </div>
@@ -2767,6 +2809,7 @@
     };
     $('capture-title').addEventListener('input', () => { $('capture-title').dataset.generated = 'false'; keepManualCapture(); });
     $('capture-description').addEventListener('input', () => { $('capture-description').dataset.generated = 'false'; keepManualCapture(); });
+    $('processing-site').onchange=()=>{processingSiteSelection=$('processing-site').value;renderProcessing();void refreshProcessingStatuses();};
     $('refresh-processing').onclick = () => { void refreshProcessingStatuses(true); };
     $('agent-task').onchange = () => { $('submit').disabled = !$('agent-task').checked; if (!$('agent-task').checked) message('当前桥接只支持智能体任务。'); };
     $('open-multica').onclick = () => {
