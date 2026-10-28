@@ -31,3 +31,19 @@ test('配置页展示三个内置站点、合成模板和字段说明', () => {
     assert.match(source, new RegExp(`<dt>${field}</dt>`));
   }
 });
+
+test('模板控件只在新建配置时启用，已有内置及自定义配置保持禁用',()=>{
+ const start=source.indexOf('    const renderProfileSelection=()=>{'),end=source.indexOf('    const persistProfile=',start);
+ const fields=Object.fromEntries(['profile-list','profile-json','profile-template-mode','use-profile-template','profile-response-test','profile-feedback'].map(id=>[id,{}]));
+ const render=new Function('$','selectedProfile','renderProfileLabel',source.slice(start,end)+'return renderProfileSelection;')(id=>fields[id],()=>fields['profile-list'].value ? {id:fields['profile-list'].value}:null,()=>{});
+ for(const value of ['builtin:bugdone','custom-site','']){
+  fields['profile-list'].value=value;render();
+  assert.equal(fields['profile-template-mode'].disabled,!!value);assert.equal(fields['use-profile-template'].disabled,!!value);
+ }
+});
+test('已有配置即使直接触发模板处理函数也不会清空JSON或切换到新建',()=>{
+ const start=source.indexOf("    $('use-profile-template').onclick="),end=source.indexOf("    $('save-profile').onclick",start);
+ const fields={'profile-list':{value:'builtin:bugdone'},'profile-json':{value:'existing-json'},'use-profile-template':{disabled:true}};
+ new Function('$','renderProfileSelection',source.slice(start,end))(id=>fields[id],()=>{throw Error('must not reset existing profile');});
+ fields['use-profile-template'].onclick();assert.equal(fields['profile-list'].value,'builtin:bugdone');assert.equal(fields['profile-json'].value,'existing-json');
+});
