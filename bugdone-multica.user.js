@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site 接入 Multica
 // @namespace    local.site.multica
-// @version      2.1.0
+// @version      2.1.1
 // @description  多站点信息捕获与 Multica 智能体任务桥接
 // @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
 // @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
@@ -650,6 +650,33 @@
       return link?.protocol === 'https:' && profile.allowedOrigins.includes(link.origin) ? link.href : '';
     } catch { return ''; } // 分享链接可缺失，不能阻止信息预览或入口初始化。
   }
+  function submittedSourceUrl(item) {
+    const safe = value => {
+      const url = locationOf(value);
+      return url?.protocol === 'https:' && !url.username && !url.password ? url.href : '';
+    };
+    for (const value of [item?.detailUrl,item?.sourceUrl]) { const url=safe(value); if(url) return url; }
+    const key = String(item?.sourceKey || '');
+    let match = key.match(/^bugdone:([a-f\d]{32}):([a-f\d]{32})$/i);
+    if (match) return shareURL({ProjectId:match[1],BugId:match[2]});
+    match = key.match(/^umeng-apm-crash:([a-f\d]{24}):(\d{5,25})$/i);
+    if (match) return `https://apm.umeng.com/platform/${match[1]}/error_analysis/crash/detail/${match[2]}`;
+    match = key.match(/^github-issues:([^:]+):([1-9]\d*)$/);
+    if (match) {
+      try {
+        const parts=decodeURIComponent(match[1]).split('/');
+        if (parts.length===2 && parts.every(part=>/^[A-Za-z0-9_.-]+$/.test(part) && part!=='.' && part!=='..'))
+          return `https://github.com/${parts.map(encodeURIComponent).join('/')}/issues/${match[2]}`;
+      } catch (_) { /* 无法恢复身份时不猜测来源 */ }
+    }
+    return '';
+  }
+  function draftSourceDetailUrl(draft) {
+    const profile=draft.profile || BUILTIN_PROFILES.find(p=>p.id===draft.siteId);
+    const detailUrl=profile ? profileShareUrl(profile,{siteId:draft.siteId,scopeId:draft.scopeId,
+      recordId:draft.recordId,number:draft.number}) : '';
+    return submittedSourceUrl({detailUrl,sourceUrl:draft.sourceUrl,sourceKey:draft.sourceKey});
+  }
   function buildCapturedDraft(record, profile) {
     const values = { siteId: record.siteId, scopeId: record.scopeId, recordId: record.recordId,
       number: record.number, title: record.title };
@@ -1133,7 +1160,7 @@
   }
   // 调试桩：仅打印阶段、数量和 HTTP 状态，不打印令牌、请求头或 Bug 正文。
   const DEBUG = true;
-  const SCRIPT_VERSION = '2.1.0';
+  const SCRIPT_VERSION = '2.1.1';
   function debug(stage, data = {}, level = 'info') {
     if (DEBUG) console[level](`[网页→Multica] ${stage}`, data);
   }
@@ -1262,7 +1289,7 @@
     const identity = draft.sourceKey || `manual:${draft.draftId}`;
     const item = { siteId: draft.siteId, sourceKey: identity, fingerprint: draft.fingerprint || '',
       ...(draft.legacyBug ? {bugId:draft.legacyBug.BugId,bugCode:draft.legacyBug.BugCode} : {}),
-      title: draft.title, issueId: issue.id,
+      title: draft.title, issueId: issue.id, sourceUrl:draft.sourceUrl || '', detailUrl:draftSourceDetailUrl(draft),
       identifier: issue.identifier || '', issueTitle: issue.title || '', submittedAt: new Date().toISOString(),
       api: c.api, status: issue.status || '', workspace: c.workspace, workspaceAlias: c.workspaceAlias || '',
       project: c.project || '', projectAlias: c.projectAlias || '' };
@@ -2183,7 +2210,7 @@
     for (const item of submittedBugs) {
       const row = document.createElement('article'); row.className = 'processing-item';
       const time = new Date(item.submittedAt).toLocaleString('zh-CN', { hour12: false });
-      row.innerHTML = `<div class="processing-main"><div class="processing-title"></div><div class="processing-meta"></div><div class="processing-status"></div></div><button class="text-button processing-delete">删除</button>`;
+      row.innerHTML = `<div class="processing-main"><div class="processing-title"></div><div class="processing-meta"></div><div class="processing-status"></div></div><div class="processing-item-actions"><button class="text-button processing-delete">删除</button></div>`;
       row.querySelector('.processing-title').textContent = item.siteId
         ? `${sourceName(item.siteId)} · ${item.title || item.sourceKey}`
         : `#${item.bugCode || '-'} ${item.title || item.bugId}`;
@@ -2194,6 +2221,11 @@
       if (saved?.context === context) setProcessingStatus(status, saved.result);
       else status.textContent = item.status ? `Multica 状态：${issueStatusLabel(item.status)}（提交时）` : 'Multica 状态：待查询';
       processingRows.set(item, status);
+      const url=submittedSourceUrl(item), detail=document.createElement(url?'a':'button');
+      detail.className='text-button processing-detail';detail.textContent='去详情页>';
+      if (url) { detail.href=url;detail.target='_blank';detail.rel='noopener noreferrer';detail.title='打开关联的原始问题详情页'; }
+      else { detail.type='button';detail.disabled=true;detail.title='旧记录未保存来源链接，且无法从来源标识恢复'; }
+      row.querySelector('.processing-item-actions').prepend(detail);
       row.querySelector('.processing-delete').onclick = () => { forgetSubmitted(item); renderProcessing(); renderBugs(); message('已从本地处理列表删除；不会删除 Multica 中的任务。'); };
       list.append(row);
     }
@@ -2248,7 +2280,7 @@
       #panel{position:fixed;right:24px;top:24px;bottom:88px;width:min(680px,calc(100vw - 48px));z-index:2147483647;display:flex;flex-direction:column;background:#f7f8fc;border:1px solid #e1e5ee;border-radius:20px;box-shadow:0 20px 70px #1e293b35;overflow:hidden}
       header{display:flex;justify-content:space-between;align-items:center;padding:23px 24px 18px;background:#fff;gap:12px}.brand{display:flex;align-items:center;gap:12px}.brand-icon{width:42px;height:42px;padding:9px;border:1px solid #dbeafe;border-radius:13px;background:#eff6ff}.brand h2{font-size:19px;line-height:1.3;margin:0;letter-spacing:-.4px}.brand small{font-size:12px;color:#8993a3}.icon-button{background:#f4f5f8;color:#677489;font-size:22px;line-height:1;padding:8px 12px}.icon-button:hover{background:#e8eaf0}
       .tabs{display:flex;padding:0 24px;gap:20px;background:#fff;border-bottom:1px solid #e7eaf1;overflow-x:auto;scrollbar-width:thin}.tabs button{flex:none;border:0;border-bottom:3px solid transparent;border-radius:0;padding:13px 2px;color:#7c8697;background:transparent;white-space:nowrap}.tabs button[aria-selected=true]{color:#2563eb;border-bottom-color:#3b82f6}.tabs button:hover{color:#2563eb}
-      .content{overflow-y:auto;min-height:0;flex:1;overscroll-behavior:contain;padding:22px 24px}.section-intro{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}.eyebrow{font-size:11px;letter-spacing:1.6px;color:#9399aa;font-weight:700}.section-intro h3{margin:3px 0 0;font-size:17px;color:#273449}.badge{font-size:12px;padding:4px 9px;border-radius:20px;color:#2563eb;background:#eff6ff;white-space:nowrap}.empty{padding:30px 8px;text-align:center;color:#94a3b8}.processing-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #edf0f5}.processing-item:last-child{border-bottom:0}.processing-main{min-width:0;flex:1}.processing-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.processing-meta{margin-top:4px;color:#8791a3;font-size:12px;overflow-wrap:anywhere}.processing-status{margin-top:9px;padding-top:7px;border-top:1px solid #edf0f5;font-size:12px;color:#64748b}.processing-status[data-kind=ready]{color:#2563eb}.processing-status[data-kind=error]{color:#b45309}.processing-delete{flex:none}.processing-actions{display:flex;align-items:center;gap:12px}.success{position:fixed;left:50%;top:18%;transform:translate(-50%,-50%);z-index:2147483648;display:flex;align-items:center;gap:12px;min-width:290px;max-width:calc(100vw - 40px);padding:15px 18px;background:#fff;border:1px solid #bbf7d0;border-radius:14px;box-shadow:0 18px 55px #14532d30}.success-mark{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#22c55e;color:#fff;font-size:21px;font-weight:800}.success strong{display:block;color:#166534}.success-copy{display:block;margin-top:3px;color:#64748b;font-size:12px;white-space:pre-line}.success-pop{animation:success-pop .35s ease-out}@keyframes success-pop{0%{opacity:0;transform:translate(-50%,-65%) scale(.9)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+      .content{overflow-y:auto;min-height:0;flex:1;overscroll-behavior:contain;padding:22px 24px}.section-intro{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}.eyebrow{font-size:11px;letter-spacing:1.6px;color:#9399aa;font-weight:700}.section-intro h3{margin:3px 0 0;font-size:17px;color:#273449}.badge{font-size:12px;padding:4px 9px;border-radius:20px;color:#2563eb;background:#eff6ff;white-space:nowrap}.empty{padding:30px 8px;text-align:center;color:#94a3b8}.processing-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #edf0f5}.processing-item:last-child{border-bottom:0}.processing-main{min-width:0;flex:1}.processing-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.processing-meta{margin-top:4px;color:#8791a3;font-size:12px;overflow-wrap:anywhere}.processing-status{margin-top:9px;padding-top:7px;border-top:1px solid #edf0f5;font-size:12px;color:#64748b}.processing-status[data-kind=ready]{color:#2563eb}.processing-status[data-kind=error]{color:#b45309}.processing-delete{flex:none}.processing-item-actions{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px}.processing-detail{text-decoration:none;white-space:nowrap;font-size:12px}.processing-detail:disabled{cursor:not-allowed}.processing-actions{display:flex;align-items:center;gap:12px}.success{position:fixed;left:50%;top:18%;transform:translate(-50%,-50%);z-index:2147483648;display:flex;align-items:center;gap:12px;min-width:290px;max-width:calc(100vw - 40px);padding:15px 18px;background:#fff;border:1px solid #bbf7d0;border-radius:14px;box-shadow:0 18px 55px #14532d30}.success-mark{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#22c55e;color:#fff;font-size:21px;font-weight:800}.success strong{display:block;color:#166534}.success-copy{display:block;margin-top:3px;color:#64748b;font-size:12px;white-space:pre-line}.success-pop{animation:success-pop .35s ease-out}@keyframes success-pop{0%{opacity:0;transform:translate(-50%,-65%) scale(.9)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
       .card{padding:18px;border:1px solid #e5e8f0;background:#fff;border-radius:14px;margin-bottom:16px}.card-title{font-weight:650;margin:0 0 12px}.field{margin-top:16px}.field:first-child{margin-top:0}label{display:block;font-size:13px;font-weight:600;color:#46536a;margin:0 0 7px}input,select,textarea{width:100%;padding:10px 12px;border:1px solid #dce1ec;border-radius:9px;background:#fff;color:#273449;outline:none}input:focus,select:focus,textarea:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #3b82f612}textarea{resize:vertical;line-height:1.7;font-size:13px}input[readonly]{background:#f8f9fc;color:#64748b;font-size:12px}.hint,small{font-size:12px;line-height:1.7;color:#8791a3}.hint{margin:7px 0 0}.row{display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap}.row.end{justify-content:flex-end}.secondary{background:#fff;border-color:#dfe3ed;color:#526075}.secondary:hover{background:#f1f3f9}.text-button{padding:4px 0;background:transparent;color:#3b82f6;font-size:12px}.text-button:hover{background:transparent;color:#1d4ed8}.label-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}.label-row label{margin:0}
       .header-actions{display:flex;align-items:center;gap:8px}.header-actions .text-button{white-space:nowrap}.header-actions .icon-button{font-size:17px}.task-title{font-size:20px;font-weight:650;border:0;padding:8px 0}.task-description{min-height:250px;border:0;padding:8px 0;resize:vertical}.task-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.task-grid .field{margin:0}.settings-group{border-top:1px solid #edf0f5;padding-top:18px;margin-top:18px}.settings-group:first-child{border-top:0;padding-top:0;margin-top:0}.settings-group h4{margin:0 0 12px;font-size:14px}.inline-control{display:flex;gap:8px}.inline-control>*:first-child{flex:1;min-width:0}.inline-control button{white-space:nowrap}.link-note{padding:10px 12px;border:1px solid #e5e8f0;border-radius:9px;background:#f8f9fc;font-size:12px;color:#64748b;overflow-wrap:anywhere}@media(max-width:520px){.task-grid{grid-template-columns:1fr}.header-actions .text-button{font-size:11px}}
       .quick-card{padding:0;overflow:hidden}.quick-head,.quick-foot{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #e5e8f0}.quick-head strong{font-size:16px;color:#536078}.quick-head small{color:#9ca3af}.quick-body{padding:18px}.quick-body .task-title{font-size:23px;width:100%;border:0;border-bottom:1px solid #dce1ec;border-radius:0;box-shadow:none;padding-bottom:16px;margin-bottom:8px}.quick-body .task-title:focus{border-bottom-color:#60a5fa}.quick-body .task-description{min-height:205px;width:100%;border:0;box-shadow:none}.quick-source{display:flex;justify-content:space-between;gap:10px;padding:12px;border:1px solid #e5e8f0;background:#f6f7f9;border-radius:9px;font-size:12px;color:#667085}.quick-source strong{color:#344054}.quick-assignee{display:flex;align-items:center;gap:10px;margin:14px 0;color:#667085}.quick-avatar{display:grid;place-items:center;width:31px;height:31px;border-radius:50%;background:#eceff2;color:#4b5563;font-weight:700}.quick-options{display:flex;flex-wrap:wrap;gap:8px}.quick-options select,.quick-options .more-button{width:auto;max-width:230px;border-radius:24px;padding:9px 12px;font-size:12px}.quick-dates{margin-top:14px;border-top:1px solid #edf0f5;padding-top:12px}.quick-dates summary{font-size:12px;color:#667085;cursor:pointer}.quick-foot{border-top:1px solid #e5e8f0;border-bottom:0;gap:8px;flex-wrap:wrap}.quick-foot label{display:flex;align-items:center;gap:6px;margin:0;font-weight:400;font-size:12px}.quick-foot input{width:17px;height:17px;accent-color:#2563eb}.quick-foot .submit{width:auto;margin:0}.quick-foot .text-button{font-size:20px}.custom-server-panel{margin-top:10px;padding:12px;border:1px solid #e5e8f0;border-radius:9px;background:#f8f9fc}
