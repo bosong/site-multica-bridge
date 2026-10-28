@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "id": "example-blank-page",
+  "version": 1,
+  "enabled": false,
+  "captureMode": "blank",
+  "metadata": {
+    "name": "空白填写示例"
+  },
+  "allowedOrigins": [
+    "https://docs.example.test"
+  ],
+  "pages": [
+    {
+      "kind": "manual",
+      "path": "/**"
+    }
+  ],
+  "draft": {
+    "titleTemplate": "",
+    "descriptionTemplate": ""
+  }
+}

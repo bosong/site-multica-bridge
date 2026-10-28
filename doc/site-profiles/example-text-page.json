@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "id": "example-text-page",
+  "version": 1,
+  "enabled": false,
+  "captureMode": "text",
+  "metadata": {
+    "name": "文本捕获示例"
+  },
+  "allowedOrigins": [
+    "https://docs.example.test"
+  ],
+  "pages": [
+    {
+      "kind": "manual",
+      "path": "/**"
+    }
+  ],
+  "draft": {
+    "titleTemplate": "{{pageTitle}}",
+    "descriptionTemplate": "来源：{{pageUrl}}\n\n选取内容：\n{{selectedText}}"
+  }
+}

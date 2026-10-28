@@ -1,12 +1,12 @@
 # Site → Multica Bridge
 
-将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v2.0.0** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
+将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v2.1.0** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
 
 ## 界面预览
 
 ![五栏工作台与站点捕获配置示意](./assets/site-profiles-preview.png)
 
-当前工作台包含「信息捕获」「AI任务创建」「处理列表」「设置」「站点捕获配置」五栏。下方两张根据当前 2.0.0 用户脚本的 HTML/CSS 生成离线示例页，由 Ego Lite 渲染截图，分别展示通用任务创建、侧边栏抽屉与 UI 设置。任务、项目、智能体、附件和链接均为合成数据。
+当前工作台包含「信息捕获」「AI任务创建」「处理列表」「设置」「站点捕获配置」五栏。下方两张根据 2.0.0 用户脚本的 HTML/CSS 生成离线示例页，由 Ego Lite 渲染截图，分别展示通用任务创建、侧边栏抽屉与 UI 设置。任务、项目、智能体、附件和链接均为合成数据。
 
 ![任务创建界面示意](./assets/ui-preview.png)
 
@@ -14,7 +14,7 @@
 
 ## 安装与升级
 
-1. [安装 v2.0.0 用户脚本](https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js)，或从 [v2.0.0 Release](https://github.com/bosong/site-multica-bridge/releases/tag/v2.0.0) 下载。
+1. [安装最新版用户脚本](https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js)。更新内容见 [CHANGELOG](./CHANGELOG.md)。
 2. 在油猴中启用脚本并刷新目标网页，点击 **Multica-AI** 入口。按钮显示未配置、待连接、连接中、已连接或连接失败。
 3. 在「设置 → 基础配置」选择官方 API 或添加自建服务器，填写 API Token 并连接。工作区、项目、智能体与标签会缓存，Token 变化、缓存缺失或手动刷新时重新读取目录。
 4. 设置默认工作区、项目、智能体和可选标签。项目、标签和日期可以留空；明确清空的默认选项不会在刷新后自动选回第一项。未填写完整连接信息时也可先保存设置。
@@ -24,6 +24,16 @@ v2.0.0 的脚本名称为「Site 接入 Multica」，`@namespace` 改为 `local.
 
 升级时建议在原有脚本编辑器中全选覆盖并保存，再刷新网页；不要同时启用新旧两份脚本。脚本管理器若把新名称/namespace 视为独立安装，其私有存储可能无法自动沿用，需要重新填写连接配置或导入已导出的站点规则。Mac 原生存储改用新 namespace；当原生桥已提供旧 namespace 数据时会迁移，当前网站旧本地值也会迁入新空间。桥未提供旧空间且没有本地副本时，需要重新配置，脚本不会绕过宿主的存储隔离。
 
+## 入口显示范围
+
+默认只在**匹配已启用配置的页面**显示悬浮入口。例如 GitHub 只在 Issues 列表与详情显示，代码页不显示。在「设置 → UI 设置 → 入口显示范围」可选择：
+
+- **仅匹配配置的页面（默认）**：只有命中页面规则时自动显示。
+- **所有 HTTPS 网页**：沿用原来的全站入口。
+- **仅快捷键或菜单打开**：不自动显示悬浮入口。
+
+未配置网页默认不挂载 UI、不自动连接 API、不安装网络捕获。随时可按 **Ctrl + Shift + M** 临时打开；支持油猴菜单 API 时也可从菜单打开工作台或入口设置。隐藏入口不会关闭已打开的面板或清空任务。新增配置与入口设置在当前页立即生效；其他已打开网页需刷新。
+
 ## 站点捕获
 
 | 来源 | 捕获方式 | 附件与来源动作 |
@@ -32,6 +42,7 @@ v2.0.0 的脚本名称为「Site 接入 Multica」，`@namespace` 改为 `local.
 | 友盟 APM | 观察崩溃列表、详情、错误明细、行为日志和堆栈接口 | 堆栈默认精简 TXT，可切换完整版；提示已加载日志覆盖数量 |
 | GitHub Issues | 以同源 GET 和 JSON 响应读取列表/详情 | 按仓库与 Issue 编号核对来源，保留正文 Markdown |
 | 其他已配置网站 | 按 JSON 规则匹配页面、接口和字段 | 可配置文本、数组图片及独立 CDN 附件；新协议仍需可信适配器 |
+| 文本/空白配置 | 按页面规则显示入口，使用文本模板或空白表单 | 不监听接口；只读取用户主动选区，可手动添加任务附件 |
 | 未配置 HTTPS 网页 | 用户主动选取可见文字，或手动填写 | 不自动监听网络；仅对当前草稿防重复，以指纹提示可能重复 |
 
 友盟从 `/error_analysis` 自动跳转到 `/crash` 时同步安装捕获，避免首个列表请求漏接；SPA 路由切换也会隔离旧页面的迟到响应。已配置站点可以选择「不关联问题 · 手动填写」，无需先捕获记录也能进入下一步。关联了问题的自动任务仍要求详情，避免把列表摘要当作完整内容。
@@ -44,6 +55,7 @@ v2.0.0 的脚本名称为「Site 接入 Multica」，`@namespace` 改为 `local.
 - [BugDone JSON](./doc/site-profiles/bugdone.json)
 - [友盟 APM JSON](./doc/site-profiles/umeng-apm-crash.json)
 - [GitHub Issues JSON](./doc/site-profiles/github-issues.json)
+- [文本捕获模板](./doc/site-profiles/example-text-page.json)与[空白填写模板](./doc/site-profiles/example-blank-page.json)
 - [自定义站点模板](./doc/site-profiles/example-issues.json)与[合成响应](./doc/site-profiles/example-response.json)
 - [设计基线](./doc/dynamic-capture-design.md)、[实施记录](./doc/multisite-implementation-plan.md)与[验收记录](./doc/local-acceptance.md)
 
@@ -70,7 +82,7 @@ v2.0.0 的脚本名称为「Site 接入 Multica」，`@namespace` 改为 `local.
 
 FastlaneTool 需提供与 `@fastlane-network`、`@fastlane-storage` 对应的原生桥，并按启用脚本的 `@connect` 授权网络目标。新版桥支持图片转传与大文件分块；旧桥对大于 1 MiB 的本地附件会提示更新。缺少桥时的网页 `fetch` 仍受目标 API 的 CORS 限制。FastlaneTool 原生代码位于独立项目，不包含在此脚本发布包中。
 
-脚本在 HTTPS 网页显示入口（`@match https://*/*`）；只有启用且匹配页面的配置才观察指定接口。`@connect *` 用于用户选择的自建 Multica 服务和配置附件域，实际捕获与图片读取仍受配置校验。请勿在仓库、截图或 Issue 中提交 Token、Cookie、私有问题或日志。
+脚本可在 HTTPS 网页运行（`@match https://*/*`），悬浮入口按显示范围决定；只有启用且匹配页面的配置才观察指定接口。`@connect *` 用于用户选择的自建 Multica 服务和配置附件域，实际捕获与图片读取仍受配置校验。请勿在仓库、截图或 Issue 中提交 Token、Cookie、私有问题或日志。
 
 ## 本地检查
 
@@ -82,3 +94,5 @@ npm test
 ```
 
 v2.0.0 发布检查：102 项自动化测试通过；Ego Lite 已验证 BugDone 列表、友盟列表及自动跳转、GitHub 列表/详情和隔离世界捕获。2026-10-27 用户确认全部验收完成。版本变化见 [CHANGELOG](./CHANGELOG.md)。
+
+2.1.0 升级检查：114 项自动化测试通过，Ego Lite 已验证入口范围、延迟挂载、快捷键与菜单、文本/空白模板和跨页面草稿保留。

@@ -59,7 +59,7 @@
 
 `pages` 是网页地址规则，`captures` 是网络接口规则，二者不必相同。`:id` 匹配一个路径段；`*` 只匹配本段，不跨 `/`。路径匹配不区分大小写，查询参数不参与匹配；根页面 `/` 也可以配置。接口必须在 `allowedOrigins` 内，按 GET/POST 方法匹配。相对请求地址先按当前页面解析，不能误用配置中另一个域名。
 
-多个启用配置匹配同一页面时，先按 `priority` 从大到小选择；相同优先级按 `id` 排序。当前只启用一份配置，避免同一响应被不同站点配置重复解释。未匹配的 HTTPS 页面只显示手动入口，不安装网络钩子。
+多个启用配置匹配同一页面时，先按 `priority` 从大到小选择；相同优先级按 `id` 排序。当前只启用一份配置，避免同一响应被不同站点配置重复解释。未匹配的 HTTPS 页面默认隐藏入口、不挂载 UI、不连接 API，也不安装网络钩子；快捷键或油猴菜单可主动打开。入口范围可在 UI 设置中修改。
 
 ## 字段说明
 
@@ -75,7 +75,7 @@
 | `captures[].variants` | `kind`、JSON `path`、array/object `type`；列表包装项可用 `itemPath` 取实际记录。 |
 | `captures[].requestKeys` | 最多 8 个必要的请求关联字段，只复制字符串/数字，不复制其他请求参数。 |
 | `captures[].requestOnPage` | 可省略或 false，表示被动监听；为 true 时，在匹配页面主动以同源会话 GET 当前 URL，发送 `Accept: application/json`。只允许已声明页面路径的 GET。 |
-| `record` | `scopeId`、`recordId`、`title` 必填；`number`、`descriptionHtml`、`descriptionText`、`sourceUrl` 可选。有限 JSON 路径或最多 4 个候选路径，依次取非空值。 |
+| `record` | API 模式的 `scopeId`、`recordId`、`title` 必填；`number`、`descriptionHtml`、`descriptionText`、`sourceUrl` 可选。有限 JSON 路径或最多 4 个候选路径，依次取非空值。 |
 | `record.fields` | 最多 20 个扩展文本字段，如 `{"productName":"$.product.name"}`，供正文模板使用；禁止覆盖来源身份和系统字段。 |
 | `identity` | 可选页面/响应身份核对：`scopeTemplate`、`recordParam`、`recordFormat`（positive-integer/hex32）、`sourceTemplate`。不能通过正文或标题猜来源。 |
 | `draft.titleTemplate` | 使用 `siteId/scopeId/recordId/number/title`；可选 `number` 缺失时留空，`#{{number}}` 会整体省略；缺少必要身份字段仍停止生成。 |
@@ -144,4 +144,32 @@ BugDone 新建成功后，`postActions: [{"adapter":"bugdone.start-processing","
 
 Tampermonkey 使用脚本级存储，新 FastlaneTool 使用 `@fastlane-storage` 原生存储，旧 WebView 回退到站点本地存储。原命名空间、`submittedBugs` 历史记录和 pending 状态保持兼容；处理列表最多 100 条，第 101 条淘汰最旧记录。
 
-任意未配置 HTTPS 网页可手动选取可见文字。手动草稿没有稳定业务 ID，只在本次草稿内防重；相同 URL/文字的本地指纹用于“可能重复”提示，不当作业务来源强查重。
+任意未配置 HTTPS 网页可先用快捷键或油猴菜单打开，再手动选取可见文字。手动草稿没有稳定业务 ID，只在本次草稿内防重；相同 URL/文字的本地指纹用于“可能重复”提示，不当作业务来源强查重。
+
+
+## 文本捕获与空白填写（2.1.0）
+
+`captureMode` 缺省为 `api`，现有接口配置无需修改。`text` 与 `blank` 不监听接口，可省略 `captures`、`record`、`dedup`；禁止配置接口捕获、自动附件、可信适配器和源站回写。任务附件仍可在创建页由用户手动添加。
+
+在「站点捕获配置」选择接口/文本/空白模板，点击「使用合成模板新建」，修改 `id`、`allowedOrigins`、`pages` 后保存并启用。文本/空白规则的 `pages[].kind` 可用 `manual`；`path: "/**"` 表示所列 origin 的所有页面。这个整站语义仅用于轻量配置，不改变旧接口规则 `*` 只匹配单段的含义。指定 `/docs/:id` 可把入口限制在某类页面。
+
+```json
+{
+  "schemaVersion": 2,
+  "id": "my-doc-page",
+  "version": 1,
+  "enabled": false,
+  "captureMode": "text",
+  "metadata": {"name": "文档摘录"},
+  "allowedOrigins": ["https://docs.example.test"],
+  "pages": [{"kind": "manual", "path": "/**"}],
+  "draft": {
+    "titleTemplate": "{{pageTitle}}",
+    "descriptionTemplate": "来源：{{pageUrl}}\n\n选取内容：\n{{selectedText}}"
+  }
+}
+```
+
+模板只支持 `pageTitle`（当前网页标题）、`pageUrl`（当前 URL）、`selectedText`（用户主动选取的可见文字）；不会自动读取整页正文或执行表达式。进入文本配置页时预填标题与 URL，选区在用户点击「捕获所选文字」时读取。`blank` 默认标题与正文均为空，可直接填写后进入下一步。
+
+轻量草稿使用手动任务身份，不生成虚假的业务 ID，也不承诺跨设备强查重。主动选取或编辑草稿后切换页面、锚点时保留内容与原来源配置；可点击「按当前页面重新生成」明确开始当前页草稿。传入第二栏的 URL 和默认标签仍来自原捕获，不把旧内容关联到新页面。API 配置不能原地改为轻量配置，或反向转换；需新建配置以保持既有查重身份。

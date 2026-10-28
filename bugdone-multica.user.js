@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site 接入 Multica
 // @namespace    local.site.multica
-// @version      2.0.0
+// @version      2.1.0
 // @description  多站点信息捕获与 Multica 智能体任务桥接
 // @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
 // @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
@@ -13,6 +13,7 @@
 // @grant        unsafeWindow
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
+// @grant        GM_registerMenuCommand
 // @grant        GM_setValue
 // @connect      api.multica.ai
 // @connect      img.bugdone.cn
@@ -135,6 +136,17 @@
     { id: 'screen', kind: 'image-url', path: '$.screenshot',
       filenameTemplate: 'issue-{{recordId}}.png' }], postActions: []
   };
+  const PAGE_TEXT_TEMPLATE = {
+    schemaVersion: 2, id: 'example-text-page', version: 1, enabled: false, captureMode: 'text',
+    metadata: { name: '文本捕获示例' }, allowedOrigins: ['https://docs.example.test'],
+    pages: [{ kind: 'manual', path: '/**' }],
+    draft: { titleTemplate: '{{pageTitle}}', descriptionTemplate: '来源：{{pageUrl}}\n\n选取内容：\n{{selectedText}}' }
+  };
+  const PAGE_BLANK_TEMPLATE = { ...PAGE_TEXT_TEMPLATE, id: 'example-blank-page', captureMode: 'blank',
+    metadata: { name: '空白填写示例' }, draft: { titleTemplate: '', descriptionTemplate: '' } };
+  function entryShouldShow(mode, profile) {
+    return mode === 'all' || mode !== 'shortcut' && !!profile?.enabled;
+  }
   // 与官网 #btnShare 使用同一规则；二维码接口不负责生成此网页链接。
   function shareURL(b) {
     if (!BUGID.test(b.ProjectId || '') || !BUGID.test(b.BugId || '')) return '';
@@ -276,17 +288,35 @@
       if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error(`${context} 必须是对象`);
       for (const key of Object.keys(value)) if (!allowed.includes(key)) throw Error(`不支持的配置字段：${context}.${key}`);
     };
-    fields(profile, ['schemaVersion', 'id', 'version', 'enabled', 'allowedOrigins', 'pages', 'captures', 'record', 'draft', 'dedup', 'attachments', 'postActions', 'metadata', 'priority', 'adapter', 'identity', 'links', 'presentation', 'defaultLabel', 'processors'], 'profile');
+    fields(profile, ['schemaVersion', 'id', 'version', 'enabled', 'allowedOrigins', 'pages', 'captures', 'record', 'draft', 'dedup', 'attachments', 'postActions', 'metadata', 'priority', 'adapter', 'identity', 'links', 'presentation', 'defaultLabel', 'processors', 'captureMode'], 'profile');
     if (![1, 2].includes(profile.schemaVersion) || !/^[a-z][a-z0-9-]{1,63}$/.test(profile.id || '') || !Number.isInteger(profile.version) || profile.version < 1 || typeof profile.enabled !== 'boolean') throw Error('站点配置版本或标识无效');
     if (!Array.isArray(profile.allowedOrigins) || !profile.allowedOrigins.length || profile.allowedOrigins.length > 8) throw Error('允许的站点不能为空');
     for (const origin of profile.allowedOrigins) {
       const url = new URL(origin);
       if (url.protocol !== 'https:' || url.origin !== origin || url.username || url.password) throw Error('允许的站点必须是 HTTPS 根地址');
     }
+    const mode = profile.captureMode ?? 'api';
+    if (!['api','text','blank'].includes(mode)) throw Error('捕获方式无效');
     if (!Array.isArray(profile.pages) || !profile.pages.length || profile.pages.length > 20) throw Error('页面规则不能为空或超过 20 条');
     for (const page of profile.pages) {
       fields(page, ['kind', 'path'], 'pages');
-      if (!['list', 'detail'].includes(page.kind) || !validRoutePattern(page.path)) throw Error('页面路径规则无效');
+      if (!(mode === 'api' ? ['list','detail'] : ['manual','list','detail']).includes(page.kind) || !validRoutePattern(page.path)) throw Error('页面路径规则无效');
+    }
+    if (mode !== 'api') {
+      if (profile.captures !== undefined && (!Array.isArray(profile.captures) || profile.captures.length) ||
+          !Array.isArray(profile.attachments) || profile.attachments.length || !Array.isArray(profile.postActions) || profile.postActions.length ||
+          ['adapter','identity','record','dedup','links','processors'].some(key => profile[key] !== undefined))
+        throw Error('文本或空白配置不能包含接口、业务身份、自动附件或源站动作');
+      const defaults = mode === 'text' ? PAGE_TEXT_TEMPLATE.draft : PAGE_BLANK_TEMPLATE.draft;
+      profile = {...profile,captures:[],draft:{...defaults,...profile.draft}};
+      fields(profile.draft,['titleTemplate','descriptionTemplate'],'draft');
+      for (const value of Object.values(profile.draft)) {
+        if (typeof value !== 'string' || value.length > 10000 ||
+            [...value.matchAll(/{{([^}]*)}}/g)].some(m=>!['pageTitle','pageUrl','selectedText'].includes(m[1])) ||
+            /[{}]/.test(value.replace(/{{(?:pageTitle|pageUrl|selectedText)}}/g,''))) throw Error('文本模板字段或格式无效');
+      }
+      validateProfileExtensions(profile,fields);
+      return profile;
     }
     if (!Array.isArray(profile.captures) || !profile.captures.length || profile.captures.length > 20) throw Error('网络捕获规则不能为空或超过 20 条');
     for (const rule of profile.captures) {
@@ -382,7 +412,7 @@
     }
     if (profile.links) { fields(profile.links, ['shareTemplate'], 'links'); if (profile.links.shareTemplate != null)
       template(profile.links.shareTemplate, ['siteId','scopeId','recordId','number']); }
-    if (profile.draft.descriptionTemplate !== undefined) template(profile.draft.descriptionTemplate, ['siteId','scopeId','recordId','number','title','description','sourceUrl','shareUrl','attachmentLinks', ...Object.keys(profile.record.fields || {})]);
+    if ((!profile.captureMode || profile.captureMode === 'api') && profile.draft.descriptionTemplate !== undefined) template(profile.draft.descriptionTemplate, ['siteId','scopeId','recordId','number','title','description','sourceUrl','shareUrl','attachmentLinks', ...Object.keys(profile.record.fields || {})]);
     if (profile.presentation) {
       fields(profile.presentation, ['recordLabel','hideSelectors','drawerSelectors'], 'presentation');
       if (profile.presentation.recordLabel && (typeof profile.presentation.recordLabel !== 'string' || profile.presentation.recordLabel.length > 80)) throw Error('记录名称无效');
@@ -454,6 +484,14 @@
     }
     return results;
   }
+  function assertProfileIdentityUnchanged(previous, profile) {
+    if (!previous) return;
+    const oldAPI = (previous.captureMode || 'api') === 'api', newAPI = (profile.captureMode || 'api') === 'api';
+    if (oldAPI !== newAPI || previous.adapter !== profile.adapter || oldAPI &&
+        (JSON.stringify(profile.record?.scopeId)!==JSON.stringify(previous.record?.scopeId) ||
+         JSON.stringify(profile.record?.recordId)!==JSON.stringify(previous.record?.recordId) || profile.dedup?.keyTemplate!==previous.dedup?.keyTemplate))
+      throw Error('已有配置的来源身份、捕获类别、适配器和查重键不可更改；请新建配置以避免重复任务');
+  }
   function profileObservationChanges(previous, next) {
     const added = (oldItems, newItems, identity, label) => {
       const known = new Set((oldItems || []).map(identity));
@@ -488,7 +526,7 @@
     if (!profile?.enabled) return null;
     const url = locationOf(value);
     if (!url || url.protocol !== 'https:' || !profile.allowedOrigins.includes(url.origin)) return null;
-    return profile.pages.find(page => pathMatches(page.path, url.pathname)) || null;
+    return profile.pages.find(page => profile.captureMode && profile.captureMode !== 'api' && page.path === '/**' || pathMatches(page.path, url.pathname)) || null;
   }
   function locationOf(url, base) { try { return new URL(String(url), base); } catch { return null; } }
   function extractProfileItems(rule, value) {
@@ -505,6 +543,7 @@
   }
   function testProfileSample(profile, sample) {
     validateSiteProfile(profile);
+    if (profile.captureMode && profile.captureMode !== 'api') throw Error('文本或空白模式不使用接口响应试运行');
     const choices = profile.captures.map(rule => ({ rule, entries: extractProfileItems(rule, sample) }));
     const selected = choices.find(choice => choice.entries.length) || choices[0];
     const valid = selected.entries.filter(({ item, kind }) => normalizeCapturedRecord(profile, item, { kind }));
@@ -682,6 +721,24 @@
       fingerprint: manualFingerprint(source.href, selected),
       sourceUrl: source.href, title: String(title || selected.split('\n')[0]).trim().slice(0, 180),
       description: `来源：${source.href}\n\n选取内容：\n${selected}`, attachments: [] };
+  }
+  function buildPageCaptureDraft(profile, {title, url, text = ''}) {
+    if (!['text','blank'].includes(profile?.captureMode) || !matchProfilePage(profile,url)) throw Error('当前页面不匹配文本或空白站点配置');
+    const selected = String(text).trim();
+    if (selected.length > 200000) throw Error('选中内容过长，请缩小范围后重试');
+    const values = {pageTitle:String(title || ''),pageUrl:new URL(url).href,selectedText:selected};
+    const defaults = profile.captureMode === 'text' ? PAGE_TEXT_TEMPLATE.draft : PAGE_BLANK_TEMPLATE.draft;
+    const render = template => template.replace(/{{(pageTitle|pageUrl|selectedText)}}/g,(_,key)=>values[key]);
+    const draftTitle = render(profile.draft?.titleTemplate ?? defaults.titleTemplate).slice(0,180);
+    const description = render(profile.draft?.descriptionTemplate ?? defaults.descriptionTemplate);
+    if (description.length > 200000) throw Error('模板生成内容过长，请缩小选区或模板');
+    return {siteId:'manual',scopeId:new URL(url).origin,recordId:'',sourceKey:'',sourceUrl:values.pageUrl,
+      title:draftTitle,description,fingerprint:manualFingerprint(values.pageUrl,selected || description),attachments:[],draftId:crypto.randomUUID(),captureProfile:structuredClone(profile)};
+  }
+  function manualDraftContext(draft, profile, url) {
+    if (draft?.siteId === 'manual' && draft.captureProfile && draft.sourceUrl)
+      return {url:draft.sourceUrl,profile:draft.captureProfile};
+    return {url,profile:profile?.captureMode && profile.captureMode!=='api' ? profile : null};
   }
   function buildTypedManualDraft({title, description, url, previous, sourceDraft}) {
     if (!String(title || '').trim()) throw Error('请填写任务标题');
@@ -1076,7 +1133,7 @@
   }
   // 调试桩：仅打印阶段、数量和 HTTP 状态，不打印令牌、请求头或 Bug 正文。
   const DEBUG = true;
-  const SCRIPT_VERSION = '2.0.0';
+  const SCRIPT_VERSION = '2.1.0';
   function debug(stage, data = {}, level = 'info') {
     if (DEBUG) console[level](`[网页→Multica] ${stage}`, data);
   }
@@ -1094,6 +1151,7 @@
   let currentId = '', root, busy = false, previewFingerprint = '', previewRecordId = '', activeDraft = null, taskDraft = null;
   let selectedAttachments = [];
   let captureRecordChoice = null;
+  let uiScheduled = false, pagePreviewContext = '';
   let attachmentDraftKey = '';
   let umengStackMode = 'summary', bugImageMode = 'compressed';
   const removedAutoAttachments = new Set();
@@ -1170,6 +1228,7 @@
   config.hideNativeAI = true;
   config.umengCaptureEnabled = true;
   config.displayMode = 'floating';
+  config.entryVisibility = 'configured';
   config.shortcut = DEFAULT_SHORTCUT;
   config.shortcutCustomized = false;
   let submittedBugs = [];
@@ -1183,6 +1242,7 @@
   if (siteMode === 'umeng' && config.umengCaptureEnabled === false) siteMode = 'manual';
   if (!['floating', 'sidebar'].includes(config.displayMode)) config.displayMode = 'floating';
   if (!/^(?=.*(?:Ctrl|Alt|Meta))(?:Ctrl\+)?(?:Alt\+)?(?:Meta\+)?(?:Shift\+)?[A-Z0-9]$/.test(config.shortcut || '')) config.shortcut = DEFAULT_SHORTCUT;
+  if (!['configured','all','shortcut'].includes(config.entryVisibility)) config.entryVisibility = 'configured';
   let connectionPhase = 'idle';
   function setConnectionPhase(phase, expectedTag) {
     if (expectedTag && root && expectedTag !== connectionCacheTag($('api').value, $('token').value)) return;
@@ -1355,19 +1415,37 @@
     return ()=>{cancelled=true;clearTimeout(timer);window.removeEventListener('message',listener);
       if(document.documentElement) try{injectCaptureScript('window.__multicaCaptureStop?.(); window.__multicaCaptureStop=null;');}catch{}};
   }
+  function syncEntryVisibility() {
+    if (!root) return;
+    $('launch').hidden = !entryShouldShow(config.entryVisibility,activeProfile);
+  }
+  function renderPageCapturePreview() {
+    const context = JSON.stringify([location.href,activeProfile]);
+    if (pagePreviewContext === context) return;
+    pagePreviewContext = context;
+    if (['capture-title','capture-description'].some(id=>$(id).dataset.generated==='false' && $(id).value)) return;
+    activeDraft = buildPageCaptureDraft(activeProfile,{title:document.title,url:location.href});
+    for (const [id,value] of [['capture-title',activeDraft.title],['capture-description',activeDraft.description]]) {
+      $(id).value=value;$(id).dataset.generated='true';
+    }
+    $('capture-state').textContent=activeProfile.captureMode==='blank'?'空白填写':'文本模板';
+    renderCaptureAttachments();
+  }
   function syncCaptureUI() {
-    if(!root) return;
+    if(!root) { if(document.body && entryShouldShow(config.entryVisibility,activeProfile)) scheduleDelayedMount(); return; }
+    syncEntryVisibility();
     $('bugdone-capture').hidden=siteMode!=='bugdone';
     $('generic-capture').hidden=siteMode==='bugdone';
     $('umeng-selector').hidden=!['umeng','custom'].includes(siteMode);
     $('umeng-stack-options').hidden=siteMode!=='umeng';
-    $('manual-selector').hidden=siteMode!=='manual';
+    $('reset-page-capture').hidden=!activeProfile?.captureMode || activeProfile.captureMode==='api';
+    $('manual-selector').hidden=siteMode!=='manual' || activeProfile?.captureMode==='blank';
     $('capture-heading').textContent=activeProfile ? `${sourceName(activeProfile.id)} 捕获` : '网页内容选取';
-    $('capture-help').textContent=activeProfile ? '按站点配置读取列表和详情；核对内容与附件后创建任务。' : '选取网页可见文字后创建通用 AI 任务。';
+    $('capture-help').textContent=activeProfile?.captureMode==='text' ? '按文本模板组合页面标题、地址和主动选取的文字；不监听接口。' : activeProfile?.captureMode==='blank' ? '此站点使用空白填写；补充标题和内容后即可进入下一步。' : activeProfile ? '按站点配置读取列表和详情；核对内容与附件后创建任务。' : '选取网页可见文字后创建通用 AI 任务。';
     const label=$('umeng-selector').querySelector('label');if(label) label.textContent=activeProfile?.presentation?.recordLabel || '选择记录';
     root.querySelector('.brand small').textContent='Issues处理工作台';
     root.querySelectorAll('.brand-icon, #launch img').forEach(image=>{image.hidden=siteMode!=='bugdone';});
-    if(siteMode==='bugdone') renderBugs(); else if(activeProfile) renderCapturedRecords();
+    if(siteMode==='bugdone') renderBugs(); else if(siteMode==='manual' && activeProfile) renderPageCapturePreview(); else if(activeProfile) renderCapturedRecords();
     setNativeAIVisibility(config.hideNativeAI !== false);
     updateSiteLayoutStyle();
   }
@@ -1382,9 +1460,9 @@
       capturedRecords.clear();bugs.clear();for(const value of Object.values(umengState)) value.clear();
       if(activeDraft?.siteId!=='manual') activeDraft=null;previewFingerprint='';previewRecordId='';currentId='';captureRecordChoice=null;observedProfileSignature=signature;
     }
-    activeProfile=profile;siteMode=profile?.adapter || (profile?'custom':'manual');
+    activeProfile=profile;siteMode=profile?.captureMode && profile.captureMode!=='api' ? 'manual' : profile?.adapter || (profile?'custom':'manual');
     syncCaptureUI();
-    if(!profile) return;
+    if(!profile || profile.captureMode && profile.captureMode!=='api') return;
     const sourceUrl=location.href;
     const receive=(text,meta)=>{
       if(epoch!==captureEpoch || location.href!==sourceUrl || meta?.sourceUrl!==sourceUrl || !matchProfilePage(profile,meta.sourceUrl)) return;
@@ -1435,7 +1513,7 @@
   setInterval(()=>refreshCaptureRuntime(),800);
   function message(text, kind = 'info') { const el = $('message'); el.textContent = text; el.className = `status-${kind}`; }
   function settings(requireConnection = true) {
-    const values = { api: $('api').value.trim(), workspace: $('workspace').value, workspaceAlias: $('workspace').selectedOptions[0]?.textContent || '', token: $('token').value, project: $('default-project').value, projectAlias: $('default-project').selectedOptions[0]?.textContent || '', agent: $('agent').value, defaultAgent: $('default-agent').value, label: $('default-label').value, hideNativeAI: $('hide-native-ai').checked, umengCaptureEnabled: config.umengCaptureEnabled, displayMode: config.displayMode, shortcut: config.shortcut, shortcutCustomized: config.shortcutCustomized, projectCustomized:config.projectCustomized, defaultAgentCustomized:config.defaultAgentCustomized };
+    const values = { api: $('api').value.trim(), workspace: $('workspace').value, workspaceAlias: $('workspace').selectedOptions[0]?.textContent || '', token: $('token').value, project: $('default-project').value, projectAlias: $('default-project').selectedOptions[0]?.textContent || '', agent: $('agent').value, defaultAgent: $('default-agent').value, label: $('default-label').value, hideNativeAI: $('hide-native-ai').checked, umengCaptureEnabled: config.umengCaptureEnabled, displayMode: config.displayMode, entryVisibility:config.entryVisibility, shortcut: config.shortcut, shortcutCustomized: config.shortcutCustomized, projectCustomized:config.projectCustomized, defaultAgentCustomized:config.defaultAgentCustomized };
     return requireConnection ? validateConfig(values) : validateStoredConfig(values);
   }
   async function bugDoneForm(params) {
@@ -1754,10 +1832,11 @@
   }
   function captureSelection() {
     const selection = selectedVisibleText(window.getSelection(), root);
-    const draft = buildManualDraft({ title: document.title, text: selection, url: location.href });
+    const draft = activeProfile?.captureMode==='text' ? buildPageCaptureDraft(activeProfile,{title:document.title,text:selection,url:location.href}) : buildManualDraft({ title: document.title, text: selection, url: location.href });
     activeDraft = { ...draft, draftId: crypto.randomUUID() };
     $('capture-title').value = draft.title;
     $('capture-description').value = draft.description;
+    $('capture-title').dataset.generated='false';$('capture-description').dataset.generated='false';
     $('capture-state').textContent = '已选取';
     renderCaptureAttachments();
     const possible = submittedBugs.find(item => item.fingerprint === draft.fingerprint &&
@@ -2208,7 +2287,7 @@
               <div id="umeng-selector" class="card" hidden><label for="capture-record">选择崩溃记录</label><select id="capture-record"></select><p id="capture-coverage" class="hint"></p></div>
               <div id="umeng-stack-options" class="card" hidden><div class="attachment-mode"><strong>堆栈 TXT 版本</strong><div class="segmented" role="group" aria-label="堆栈 TXT 版本"><button id="umeng-stack-summary" type="button" aria-pressed="true" data-action>精简版（默认）</button><button id="umeng-stack-full" type="button" aria-pressed="false" data-action>完整版</button></div></div><p class="hint">精简版优先保留符号化堆栈，最多两种堆栈、每种前 40 行；完整版会上传捕获到的全部堆栈。</p></div>
               <div id="manual-selector" class="card" hidden><p class="hint">先在网页中选中需要的可见文字，再点击捕获。仅在点击时读取选区，不监听接口或复制整页。</p><div class="row"><button id="capture-selection" type="button">捕获所选文字</button></div></div>
-              <div class="card"><div class="field"><label for="capture-title">任务标题草稿</label><input id="capture-title" placeholder="可直接填写，也可选择记录或捕获网页文字"></div><div class="field"><label for="capture-description">任务描述草稿</label><textarea id="capture-description" rows="15" placeholder="可直接填写任务描述；没有关联问题也能进入下一步。"></textarea></div><div class="capture-attachments" hidden><strong>已捕获附件 · 点击查看</strong><div id="capture-attachments" class="attachment-list"></div></div></div>
+              <div class="card"><div class="field"><div class="label-row"><label for="capture-title">任务标题草稿</label><button id="reset-page-capture" type="button" class="text-button" hidden>按当前页面重新生成</button></div><input id="capture-title" placeholder="可直接填写，也可选择记录或捕获网页文字"></div><div class="field"><label for="capture-description">任务描述草稿</label><textarea id="capture-description" rows="15" placeholder="可直接填写任务描述；没有关联问题也能进入下一步。"></textarea></div><div class="capture-attachments" hidden><strong>已捕获附件 · 点击查看</strong><div id="capture-attachments" class="attachment-list"></div></div></div>
             </div>
             <div id="bugdone-capture">
             <div class="section-intro"><div><div class="eyebrow">BUG CONTEXT</div><h3>确认问题与上下文</h3></div><span id="bug-state" class="badge">等待详情</span></div>
@@ -2230,13 +2309,13 @@
             <div class="section-intro"><div><div class="eyebrow">PREFERENCES</div><h3>设置</h3></div></div>
             <div class="card"><div class="settings-group"><h4>基础配置</h4><div class="field"><label for="api">API 服务根地址</label><select id="api"></select><p class="hint">选择官方服务，或添加你自己的 Multica 服务。</p><div id="custom-server-panel" class="custom-server-panel" hidden><label for="custom-api">添加自建服务器</label><div class="inline-control"><input id="custom-api" type="url" placeholder="https://your-multica.example"><button id="add-api" class="secondary">添加</button></div></div></div><div class="field"><label for="token">访问令牌（API Token）</label><input id="token" type="password" autocomplete="off"><p class="hint">用于连接 Multica，仅保存在当前站点的本地存储。</p></div><div class="row"><button id="connect" data-action>手动连接 / 刷新</button></div></div>
               <div class="settings-group"><h4>任务默认配置</h4><div class="field"><label for="workspace">默认工作区</label><select id="workspace"><option value="">请先连接</option></select><p class="hint">新任务使用这个工作区，可随时切换。</p></div><div class="field"><label for="default-project">默认项目</label><select id="default-project"><option value="">请先连接</option></select><p class="hint">预先填入任务创建页，提交前仍可修改。</p></div><div class="field"><label for="default-agent">默认处理智能体</label><select id="default-agent"><option value="">请先连接</option></select><p class="hint">新任务默认指派给这位智能体。</p></div><div class="field"><label for="default-label">默认标签</label><select id="default-label"><option value="">不指定标签</option></select><p class="hint">新任务默认使用的标签，可留空。</p></div></div>
-              <div class="settings-group"><h4>UI 设置</h4><div class="setting-row"><div class="setting-copy"><strong>打开／关闭任务面板快捷键</strong><small id="shortcut-description">在当前网页按快捷键打开或关闭面板</small></div><div class="setting-control shortcut-control"><input id="shortcut" type="text" readonly aria-label="当前任务面板快捷键"><button id="edit-shortcut" class="secondary" type="button">修改</button><button id="reset-shortcut" class="secondary" type="button">恢复默认</button></div></div><div class="setting-row"><div class="setting-copy"><strong>主面板显示样式</strong><small>选择工作台以侧边栏或浮窗方式显示</small></div><div class="setting-control segmented" role="group" aria-label="主面板显示样式"><button id="mode-sidebar" type="button" aria-pressed="false">侧边栏</button><button id="mode-floating" type="button" aria-pressed="true">浮窗</button></div></div><div class="setting-row"><div class="setting-copy"><strong>隐藏 BugDone 原有 AI 按钮</strong><small>隐藏页面内置的 AI 入口（openIntelligentTracking）</small></div><label class="switch setting-control" aria-label="隐藏 BugDone 原有 AI 按钮"><input type="checkbox" id="hide-native-ai"><span class="switch-track" aria-hidden="true"></span></label></div></div><div class="row"><button id="save" data-action>保存设置</button></div><p class="hint">自建服务器还需允许油猴或 Mac App 网络桥访问。</p></div>
+              <div class="settings-group"><h4>UI 设置</h4><div class="setting-row"><div class="setting-copy"><strong>入口显示范围</strong><small>隐藏入口时，仍可用快捷键或油猴菜单打开工作台。</small></div><div class="setting-control"><select id="entry-visibility" aria-label="入口显示范围"><option value="configured">仅匹配配置的页面（默认）</option><option value="all">所有 HTTPS 网页</option><option value="shortcut">仅快捷键或菜单打开</option></select></div></div><div class="setting-row"><div class="setting-copy"><strong>打开／关闭任务面板快捷键</strong><small id="shortcut-description">在当前网页按快捷键打开或关闭面板</small></div><div class="setting-control shortcut-control"><input id="shortcut" type="text" readonly aria-label="当前任务面板快捷键"><button id="edit-shortcut" class="secondary" type="button">修改</button><button id="reset-shortcut" class="secondary" type="button">恢复默认</button></div></div><div class="setting-row"><div class="setting-copy"><strong>主面板显示样式</strong><small>选择工作台以侧边栏或浮窗方式显示</small></div><div class="setting-control segmented" role="group" aria-label="主面板显示样式"><button id="mode-sidebar" type="button" aria-pressed="false">侧边栏</button><button id="mode-floating" type="button" aria-pressed="true">浮窗</button></div></div><div class="setting-row"><div class="setting-copy"><strong>隐藏 BugDone 原有 AI 按钮</strong><small>隐藏页面内置的 AI 入口（openIntelligentTracking）</small></div><label class="switch setting-control" aria-label="隐藏 BugDone 原有 AI 按钮"><input type="checkbox" id="hide-native-ai"><span class="switch-track" aria-hidden="true"></span></label></div></div><div class="row"><button id="save" data-action>保存设置</button></div><p class="hint">自建服务器还需允许油猴或 Mac App 网络桥访问。</p></div>
             <p class="version">Issues → Multica · v${SCRIPT_VERSION}</p>
           </section>
           <section id="view-profiles" role="tabpanel" aria-labelledby="tab-profiles" hidden>
             <div class="section-intro"><div><div class="eyebrow">SOURCE CONFIGURATION</div><h3>站点捕获配置</h3></div></div>
-            <div class="card"><div class="settings-group"><h4>内置站点配置</h4><div class="builtin-grid"><button id="open-bugdone-profile" type="button" class="builtin-card"><strong>BugDone</strong><small>www.bugdone.cn</small><span>内置 · 已启用 · 查看规则</span></button><button id="open-umeng-profile" type="button" class="builtin-card"><strong>友盟 APM</strong><small>apm.umeng.com</small><span id="umeng-profile-state">内置 · 已启用 · 查看规则</span></button><button id="open-github-profile" type="button" class="builtin-card"><strong>GitHub Issues</strong><small>github.com</small><span>内置 · 已启用 · 查看规则</span></button></div><div class="setting-row"><div class="setting-copy"><strong>启用友盟 APM 崩溃捕获</strong><small>在友盟崩溃列表和详情页面读取已声明的接口响应；关闭后只保留手动选取入口，当前页面立即生效。</small></div><label class="switch setting-control" aria-label="启用友盟 APM 崩溃捕获"><input type="checkbox" id="enable-umeng"><span class="switch-track" aria-hidden="true"></span></label></div><p class="hint">导入声明式 JSON 配置，可为 HTTPS 网站指定列表页、详情页、接口和字段映射。配置不会执行网页脚本；保存后当前页面立即应用；其他已打开页面需刷新。</p><div class="field"><label for="profile-list">站点配置</label><select id="profile-list"></select><p class="hint">内置配置也可调整；删除内置覆盖会恢复默认。来源身份与查重键保持稳定，自定义配置保存后手动启用。</p></div><div class="row"><button id="use-profile-template" type="button" class="secondary">使用合成模板新建</button></div><div class="field"><label for="profile-label-mode">此站点的默认标签</label><select id="profile-label-mode"><option value="inherit">继承全局默认标签</option><option value="none">不指定标签</option><option value="fixed">指定标签（绑定当前服务和工作区）</option></select><select id="profile-label-value" hidden aria-label="站点指定标签"></select><p class="hint">进入任务创建页时应用；用户最后的选择优先。指定标签不会跨工作区使用。修改后点击校验并保存。</p></div><div class="field"><label for="profile-json">配置 JSON</label><textarea id="profile-json" rows="8" placeholder="粘贴符合 schemaVersion: 2 的站点配置，不要包含 Token、Cookie 或私密日志"></textarea></div><div class="row"><button id="save-profile" type="button" class="secondary">校验并保存</button><button id="toggle-profile" type="button" class="secondary">启用 / 停用</button><button id="export-profile" type="button" class="secondary">导出配置</button><button id="rollback-profile" type="button" class="secondary">回滚上一版</button><button id="delete-profile" type="button" class="secondary">删除所选配置</button></div><details class="field"><summary>用合成响应试运行字段映射</summary><textarea id="profile-sample" rows="4" placeholder="粘贴不含私密信息的合成响应 JSON；内容不会保存"></textarea><div class="row"><button id="test-profile" type="button" class="secondary">试运行</button></div></details><p id="profile-feedback" class="hint"></p><details id="profile-field-guide" class="field"><summary>配置字段说明与填写规则</summary><dl class="profile-guide">
-<dt>schemaVersion</dt><dd>配置格式版本；支持 1 和 2，新配置使用 2。</dd>
+            <div class="card"><div class="settings-group"><h4>内置站点配置</h4><div class="builtin-grid"><button id="open-bugdone-profile" type="button" class="builtin-card"><strong>BugDone</strong><small>www.bugdone.cn</small><span>内置 · 已启用 · 查看规则</span></button><button id="open-umeng-profile" type="button" class="builtin-card"><strong>友盟 APM</strong><small>apm.umeng.com</small><span id="umeng-profile-state">内置 · 已启用 · 查看规则</span></button><button id="open-github-profile" type="button" class="builtin-card"><strong>GitHub Issues</strong><small>github.com</small><span>内置 · 已启用 · 查看规则</span></button></div><div class="setting-row"><div class="setting-copy"><strong>启用友盟 APM 崩溃捕获</strong><small>在友盟崩溃列表和详情页面读取已声明的接口响应；关闭后只保留手动选取入口，当前页面立即生效。</small></div><label class="switch setting-control" aria-label="启用友盟 APM 崩溃捕获"><input type="checkbox" id="enable-umeng"><span class="switch-track" aria-hidden="true"></span></label></div><p class="hint">导入声明式 JSON 配置，可为 HTTPS 网站指定列表页、详情页、接口和字段映射。配置不会执行网页脚本；保存后当前页面立即应用；其他已打开页面需刷新。</p><div class="field"><label for="profile-list">站点配置</label><select id="profile-list"></select><p class="hint">内置配置也可调整；删除内置覆盖会恢复默认。来源身份与查重键保持稳定，自定义配置保存后手动启用。</p></div><div class="row"><select id="profile-template-mode" aria-label="新建配置模板类型"><option value="api">接口捕获模板</option><option value="text">文本捕获模板</option><option value="blank">空白填写模板</option></select><button id="use-profile-template" type="button" class="secondary">使用合成模板新建</button></div><div class="field"><label for="profile-label-mode">此站点的默认标签</label><select id="profile-label-mode"><option value="inherit">继承全局默认标签</option><option value="none">不指定标签</option><option value="fixed">指定标签（绑定当前服务和工作区）</option></select><select id="profile-label-value" hidden aria-label="站点指定标签"></select><p class="hint">进入任务创建页时应用；用户最后的选择优先。指定标签不会跨工作区使用。修改后点击校验并保存。</p></div><div class="field"><label for="profile-json">配置 JSON</label><textarea id="profile-json" rows="8" placeholder="粘贴符合 schemaVersion: 2 的站点配置，不要包含 Token、Cookie 或私密日志"></textarea></div><div class="row"><button id="save-profile" type="button" class="secondary">校验并保存</button><button id="toggle-profile" type="button" class="secondary">启用 / 停用</button><button id="export-profile" type="button" class="secondary">导出配置</button><button id="rollback-profile" type="button" class="secondary">回滚上一版</button><button id="delete-profile" type="button" class="secondary">删除所选配置</button></div><details id="profile-response-test" class="field"><summary>用合成响应试运行字段映射</summary><textarea id="profile-sample" rows="4" placeholder="粘贴不含私密信息的合成响应 JSON；内容不会保存"></textarea><div class="row"><button id="test-profile" type="button" class="secondary">试运行</button></div></details><p id="profile-feedback" class="hint"></p><details id="profile-field-guide" class="field"><summary>配置字段说明与填写规则</summary><dl class="profile-guide">
+<dt>captureMode</dt><dd>api（缺省）接口捕获；text 只在主动捕获时把 pageTitle/pageUrl/selectedText 填入 draft 模板；blank 空白填写。text/blank 可省略 captures、record、dedup，不能声明自动附件或源站动作。</dd><dt>schemaVersion</dt><dd>配置格式版本；支持 1 和 2，新配置使用 2。</dd>
 <dt>id</dt><dd>站点配置唯一标识，使用小写字母、数字和连字符；不能与内置配置重复。</dd>
 <dt>version</dt><dd>此配置的修订号，修改映射时建议递增。</dd>
 <dt>enabled</dt><dd>是否自动捕获；新导入默认停用，核对后在此页启用。</dd>
@@ -2292,6 +2371,7 @@
     const renderProfileSelection=()=>{
       const profile=selectedProfile();$('profile-json').readOnly=false;
       $('profile-json').value=profile?JSON.stringify(profile,null,2):'';renderProfileLabel(profile);
+      $('profile-response-test').hidden=!!profile?.captureMode && profile.captureMode!=='api';
       $('profile-feedback').textContent=profile?`${profile.metadata?.name || profile.id} · 保存后立即应用。来源身份与查重键不可改；回滚可恢复上一版。`:'';
     };
     const persistProfile=(profile,remember=true)=>{
@@ -2324,13 +2404,14 @@
       $('profile-list').value='builtin:'+id;renderProfileSelection();$('profile-json').scrollIntoView({block:'nearest'});
     };
     $('use-profile-template').onclick=()=>{
-      $('profile-list').value='';renderProfileSelection();$('profile-json').value=JSON.stringify(PROFILE_TEMPLATE,null,2);$('profile-json').focus();
+      $('profile-list').value='';renderProfileSelection();$('profile-json').value=JSON.stringify(({api:PROFILE_TEMPLATE,text:PAGE_TEXT_TEMPLATE,blank:PAGE_BLANK_TEMPLATE})[$('profile-template-mode').value] || PROFILE_TEMPLATE,null,2);$('profile-json').focus();
+      $('profile-response-test').hidden=$('profile-template-mode').value!=='api';
     };
     $('save-profile').onclick=()=>run(()=>{
       const raw=$('profile-json').value;if(raw.length>80000) throw Error('配置文件不得超过 80 KB');
       const profile=validateSiteProfile(JSON.parse(raw)),previous=profileRegistry().find(p=>p.id===profile.id);
       if(selectedProfileId() && profile.id!==selectedProfileId()) throw Error('不能修改已有配置 ID；请使用新建配置');
-      if(previous && (profile.adapter!==previous.adapter || JSON.stringify(profile.record.scopeId)!==JSON.stringify(previous.record.scopeId) || JSON.stringify(profile.record.recordId)!==JSON.stringify(previous.record.recordId) || profile.dedup.keyTemplate!==previous.dedup.keyTemplate)) throw Error('已有配置的来源身份、适配器和查重键不可更改；请新建配置以避免重复任务');
+      assertProfileIdentityUnchanged(previous,profile);
       const changes=profileObservationChanges(previous,profile);
       const saved={...profile,enabled:!!previous?.enabled && profile.enabled && !changes.length};
       persistProfile(saved);
@@ -2373,6 +2454,12 @@
       $(id).dataset.userEdited='true';$(id).dataset.context=`${$('api').value}:${$('workspace').value}`;
     });
     $('hide-native-ai').checked = config.hideNativeAI !== false;
+    $('entry-visibility').value=config.entryVisibility;
+    $('entry-visibility').addEventListener('change',()=>{
+      config.entryVisibility=$('entry-visibility').value;syncEntryVisibility();writeValue('config',{...config});
+      message('入口显示范围已保存；快捷键仍可打开工作台。','success');
+      if (!$('launch').hidden && config.token && config.api) void run(connectIfNeeded);
+    });
     applyPanelMode(config.displayMode);
     function showShortcut() {
       const label = config.shortcut.replaceAll('+', ' + ');
@@ -2495,7 +2582,8 @@
       if (useManual) {
         const title = $(siteMode === 'bugdone' ? 'title' : 'capture-title').value;
         const description = $(siteMode === 'bugdone' ? 'description' : 'capture-description').value;
-        taskDraft = snapshotTaskDraft(buildTypedManualDraft({title,description,url:location.href,previous:taskDraft,sourceDraft:activeDraft}));
+        const context = manualDraftContext(siteMode!=='bugdone'?activeDraft:null,activeProfile,location.href);
+        taskDraft = snapshotTaskDraft(buildTypedManualDraft({title,description,url:context.url,previous:taskDraft,sourceDraft:activeDraft}),context.profile);
         selectedAttachments = selectedAttachments.filter(item=>!item.generated);
         attachmentDraftKey = `manual:${taskDraft.draftId}`;
         $('task-title').value = title; $('task-description').value = description;
@@ -2589,6 +2677,12 @@
       event.target.value = ''; renderSelectedAttachments();
     };
     $('capture-selection').onclick = () => run(captureSelection);
+    $('reset-page-capture').onclick=()=>run(()=>{
+      if (!activeProfile?.captureMode || activeProfile.captureMode==='api') return;
+      activeDraft=null;pagePreviewContext='';
+      $('capture-title').dataset.generated='true';$('capture-description').dataset.generated='true';
+      renderPageCapturePreview();message('已按当前页面重新生成草稿。');
+    });
     $('capture-record').onchange = () => {
       captureRecordChoice = {url:location.href,key:$('capture-record').value};
       activeDraft = null; renderCapturedRecords();
@@ -2724,6 +2818,7 @@
     if (storageFailed) message('浏览器存储不可用，请允许当前网站保存数据后刷新。');
     debug('界面挂载完成', { buttonConnected: host.isConnected, capturedBugs: bugs.size });
     requestAnimationFrame(() => {
+      if (launch.hidden) { debug('入口按显示范围隐藏',{mode:config.entryVisibility}); return; }
       constrainLaunch('initial-layout');
       const rect = launch.getBoundingClientRect(), style = getComputedStyle(launch);
       const inViewport = rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
@@ -2739,18 +2834,19 @@
         viewport: { width: innerWidth, height: innerHeight }, zIndex: style.zIndex, connectionState: connectionPhase
       }, visible && !covered ? 'info' : 'warn');
     });
-    if (config.token && config.api) void run(connectIfNeeded);
+    if (config.token && config.api && entryShouldShow(config.entryVisibility,activeProfile)) void run(connectIfNeeded);
   }
   function mountWithDiagnostics() {
     try { mount(); }
     catch (e) { debug('界面挂载失败', { errorType: e.name }, 'error'); }
   }
-  let uiScheduled = false;
   function scheduleDelayedMount() {
     if (uiScheduled) return;
     uiScheduled = true;
     debug('页面已就绪，安排延迟初始化', { delayMs: UI_DELAY_MS });
     setTimeout(function delayedFunction() {
+      uiScheduled = false;
+      if (!entryShouldShow(config.entryVisibility,activeProfile)) { debug('入口按显示范围隐藏',{mode:config.entryVisibility}); return; }
       debug('延迟回调已执行', { bodyReady: !!document.body });
       if (!document.body) {
         uiScheduled = false;
@@ -2760,6 +2856,21 @@
       }
       if (!document.getElementById('bugdone-multica-bridge')) mountWithDiagnostics();
     }, UI_DELAY_MS);
+  }
+  function openWorkbenchFromCommand(tab = 'multica') {
+    if (!document.body) { document.addEventListener('DOMContentLoaded',()=>openWorkbenchFromCommand(tab),{once:true}); return; }
+    if (!root) mountWithDiagnostics();
+    if (!root || !$('panel')) return;
+    openPanel();switchTab(tab,true);
+    if (config.token && config.api) void run(connectIfNeeded);
+  }
+  window.addEventListener('keydown', event => {
+    if (root || event.repeat || event.isComposing || !shortcutMatches(event,config.shortcut)) return;
+    event.preventDefault();event.stopImmediatePropagation();openWorkbenchFromCommand();
+  },true);
+  if (typeof GM_registerMenuCommand === 'function') {
+    GM_registerMenuCommand('打开 Issues处理工作台',()=>openWorkbenchFromCommand());
+    GM_registerMenuCommand('设置入口显示范围',()=>openWorkbenchFromCommand('settings'));
   }
   if (document.readyState !== 'loading') scheduleDelayedMount();
   else {
