@@ -9,14 +9,9 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.resolve(process.argv[2] || '/tmp/site-multica-readme-previews');
-const source = await readFile(path.join(root, 'bugdone-multica.user.js'), 'utf8');
-const version = source.match(/const SCRIPT_VERSION = '([^']+)'/)[1];
-const marker = '    root.innerHTML = `';
-const start = source.indexOf(marker) + marker.length;
-const end = source.indexOf('`;', start);
-if (start < marker.length || end < start) throw Error('Current UI template was not found');
-const markup = source.slice(start, end).replaceAll('${SCRIPT_VERSION}', version);
-if (markup.includes('${')) throw Error('UI template added an interpolation; update the preview generator');
+const {version}=JSON.parse(await readFile(path.join(root,'package.json'),'utf8'));
+const markup=('<style>'+await readFile(path.join(root,'src/ui/styles.css'),'utf8')+'</style>'+await readFile(path.join(root,'src/ui/panel.html'),'utf8')).replaceAll('${SCRIPT_VERSION}',version);
+if(markup.includes('${')) throw Error('UI template added an interpolation; update the preview generator');
 
 const css = `
 *{box-sizing:border-box}body{margin:0;background:#edf2f8;color:#25334a;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}

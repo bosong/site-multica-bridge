@@ -2,13 +2,12 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 // 测试侧提取纯函数，浏览器交付脚本不携带 Node 导出分支。
-const source = fs.readFileSync(require.resolve('../bugdone-multica.user.js'), 'utf8');
+const source = require('./helpers/source.cjs').source;
 const start = source.indexOf('(() => {');
 const end = source.indexOf('  // 调试桩：');
 assert.ok(start >= 0 && end > start);
 assert.ok(!/\bmodule\b|\brequire\s*\(/.test(source));
-const bridge = new Function('return ' + source.slice(start, end) +
-  'return { parseResponse, mergeBug, marker, owns, isBugAPI, validateConfig, findExisting, submitOnce, shareURL, agentChoices, agentCacheKey, listItems, buildIssueBody, issueLabelState, bugTaskTitle, connectionCacheTag, needsCatalogRefresh, connectionBadge, verifyConnection, lookupSubmittedIssue, issueStatusLabel, loadSubmittedStatuses, shortcutFromEvent, shortcutMatches, normalizeShortcutConfig, startBugDoneProcessing };\n})();')();
+const bridge = require('../.generated/test-core.cjs');
 const id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const c = { api: 'https://api.multica.ai', workspace: '11111111-1111-4111-8111-111111111111', token: 'test' };
 const bug = { BugId: id };
@@ -93,9 +92,9 @@ test('刷新标签目录时保留已保存的默认标签，不静默清空创�
   const document = { createElement: () => ({ value: '', textContent: '' }) };
   const root = { getElementById: id => elements[id] };
   const config = { project: '', agent: '', defaultAgent: '', label: '6ee01bdb-c3dd-4892-a8dd-f4097b70b34a' };
-  const { applyCatalog } = new Function('document', 'root', 'config', 'renderAgentChoices',
-    `const $ = id => root.getElementById(id), activeDraft=null, taskDraft=null, activeProfile=null; ${source.slice(source.indexOf('  function resolveProfileLabel('),source.indexOf('  function selectSiteProfile('))}\n${source.slice(start, end)}\nreturn { applyCatalog };`)(
-    document, root, config, () => 0);
+  const { applyCatalog } = new Function('document', 'root', 'config', 'renderAgentChoices', 'resolveProfileLabel',
+    `const $ = id => root.getElementById(id), activeDraft=null, taskDraft=null, activeProfile=null; \n${source.slice(start, end)}\nreturn { applyCatalog };`)(
+    document, root, config, () => 0, require('../.generated/test-core.cjs').resolveProfileLabel);
   applyCatalog(config, { projects: [], agents: [], labels: [] });
   assert.equal(elements['default-label'].value, config.label);
   assert.equal(elements['task-label'].value, config.label);

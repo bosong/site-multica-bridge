@@ -1,10 +1,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const source = fs.readFileSync(require.resolve('../bugdone-multica.user.js'), 'utf8');
+const source = require('./helpers/source.cjs').source;
 const names = ['validateSiteProfile','normalizeCapturedRecord','buildCapturedDraft','matchSiteCapture','matchProfilePage','resolveProfileLabel','selectSiteProfile','profileIdentityMatches','runProfilePostActions','snapshotTaskDraft','submitTaskOnce','chooseCapturedRecord','PROFILE_TEMPLATE','BUGDONE_PROFILE','GITHUB_PROFILE'];
-const core = new Function('return ' + source.slice(source.indexOf('(() => {'), source.indexOf('  // 调试桩：')) +
- `return {${names.map(n => `${n}: typeof ${n} === 'undefined' ? undefined : ${n}`).join(',')}};})();`)();
+const core = require('../.generated/test-core.cjs');
 const make = () => ({...structuredClone(core.PROFILE_TEMPLATE), schemaVersion:2, enabled:true,
  metadata:{name:'演示问题'}, defaultLabel:{mode:'none'},
  presentation:{recordLabel:'选择问题',hideSelectors:['#nativeAI'],drawerSelectors:['#detail']},
@@ -73,7 +72,7 @@ test('拒绝任意代码、任意回写动作和过大压缩参数',()=>{
 });
 
 test('卸载网络监听后不交付旧请求，恢复原 fetch',async()=>{
- const load = new Function('return '+source.slice(source.indexOf('(() => {'), source.indexOf('  // 调试桩：'))+'return {installCaptureHooks};})();')();
+ const load = require('../.generated/test-core.cjs');
  let finish; const original=()=>new Promise(resolve=>{finish=resolve;});
  const page={fetch:original,location:{href:'https://issues.example.test/issues'}}; const received=[];
  const hooks=load.installCaptureHooks(page,(...args)=>received.push(args),()=>({id:'issues',maxResponseBytes:1000}));

@@ -1,0 +1,9 @@
+// Standalone: mutates a source constant temporarily, so never run concurrently with unit tests.
+const fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');const {spawn,execFileSync}=require('node:child_process');const {createHash}=require('node:crypto');
+const root=path.resolve(__dirname,'../..'),file=path.join(root,'src/config/constants.js'),artifact=path.join(root,'bugdone-multica.user.js');
+(async()=>{const original=await fs.readFile(file,'utf8');execFileSync(process.execPath,['scripts/build.mjs'],{cwd:root,stdio:'pipe'});const digest=data=>createHash('sha256').update(data).digest('hex'),before=digest(await fs.readFile(artifact));
+ const child=spawn(process.execPath,['scripts/build.mjs','--watch'],{cwd:root,stdio:['ignore','pipe','pipe']});let output='',errors='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>errors+=data);
+ const wait=predicate=>new Promise((resolve,reject)=>{const deadline=Date.now()+20000;const timer=setInterval(()=>{if(predicate()){clearInterval(timer);resolve();}else if(child.exitCode!==null||Date.now()>deadline){clearInterval(timer);reject(Error(errors||'Watch timeout'));}},50);});
+ try{await wait(()=>output.includes('Watching src/'));await fs.writeFile(file,original.replace('UI_DELAY_MS = 300','UI_DELAY_MS = 301'));await wait(()=>(output.match(/Built v/g)||[]).length>=2);assert.match(await fs.readFile(artifact,'utf8'),/UI_DELAY_MS = 301/);await fs.writeFile(file,original);await wait(()=>(output.match(/Built v/g)||[]).length>=3);assert.equal(digest(await fs.readFile(artifact)),before);console.log('Watch integration passed: source edit rebuilt artifact; restore reproduced original bytes.');}
+ finally{await fs.writeFile(file,original);child.kill('SIGINT');await new Promise(resolve=>child.once('close',resolve));execFileSync(process.execPath,['scripts/build.mjs'],{cwd:root,stdio:'pipe'});}
+})().catch(error=>{console.error(error);process.exitCode=1;});

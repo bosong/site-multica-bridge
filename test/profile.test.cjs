@@ -1,11 +1,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const source = fs.readFileSync(require.resolve('../bugdone-multica.user.js'), 'utf8');
+const source = require('./helpers/source.cjs').source;
 const start = source.indexOf('(() => {');
 const end = source.indexOf('  // 调试桩：');
-const core = new Function('return ' + source.slice(start, end) +
-  'return { validateSiteProfile, profileObservationChanges, matchSiteCapture, matchProfilePage, extractProfileItems, testProfileSample, normalizeCapturedRecord, mergeCapturedRecord, collectStandardRecords, buildCapturedDraft, buildUmengDraft, buildManualDraft, manualFingerprint, selectedVisibleText, capturePreviewUpdate, needsCapturedDetail, siteModeForUrl, sourceMarker, submitDraftOnce, submitManualOnce, recordKey, BUGDONE_PROFILE, UMENG_PROFILE, GITHUB_PROFILE, PROFILE_TEMPLATE, createUmengCaptureState, applyUmengCapture, isBugAPI, parseResponse, installCaptureHooks };\n})();')();
+const core = require('../.generated/test-core.cjs');
 
 test('GitHub Issues 接口列表与详情按仓库和编号归并，正文保留 Markdown', () => {
   const github = core.validateSiteProfile(core.GITHUB_PROFILE);

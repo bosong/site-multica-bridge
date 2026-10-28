@@ -1,8 +1,8 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
-const source=fs.readFileSync(require.resolve('../bugdone-multica.user.js'),'utf8');
-const core=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return {installRouteHooks:typeof installRouteHooks===\'function\'?installRouteHooks:null,installCaptureHooks,matchSiteCapture,UMENG_PROFILE,applyUmengCapture,createUmengCaptureState};})();')();
+const source=require('./helpers/source.cjs').source;
+const core=require('../.generated/test-core.cjs');
 
 // Regression: deferring route detection until a timer loses the first XHR after redirect.
 test('友盟站内自动跳转后立即发出的列表请求也进入捕获状态',()=>{

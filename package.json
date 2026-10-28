@@ -1,9 +1,21 @@
 {
   "name": "site-multica-bridge",
-  "version": "2.4.0",
+  "version": "3.0.0",
   "private": true,
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "check": "node scripts/build.mjs --check",
+    "pretest": "npm run build",
     "test": "node --test test/*.test.cjs",
-    "check": "node --check bugdone-multica.user.js"
+    "test:watch": "node test/integration/watch.cjs"
+  },
+  "devDependencies": {
+    "acorn": "8.19.0",
+    "esbuild": "0.28.2"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.14.0"
   }
 }

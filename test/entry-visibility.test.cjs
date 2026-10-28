@@ -1,7 +1,7 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
-const source=fs.readFileSync(require.resolve('../bugdone-multica.user.js'),'utf8');
+const source=require('./helpers/source.cjs').source;
 const names=['validateSiteProfile','matchProfilePage','matchSiteCapture','selectSiteProfile','entryShouldShow','buildPageCaptureDraft','PAGE_TEXT_TEMPLATE','PAGE_BLANK_TEMPLATE','BUGDONE_PROFILE','GITHUB_PROFILE'];
-const core=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+`return {${names.map(n=>`${n}:typeof ${n}==='undefined'?undefined:${n}`).join(',')}};})();`)();
+const core=require('../.generated/test-core.cjs');
 const profile=mode=>({schemaVersion:2,id:'example-page',version:1,enabled:true,captureMode:mode,allowedOrigins:['https://docs.example.test'],pages:[{kind:'manual',path:'/**'}]});
 test('缺省只在配置页面显示，all/shortcut 可覆盖，失效配置不显示',()=>{
  assert.equal(typeof core.entryShouldShow,'function');
@@ -42,7 +42,7 @@ test('空白模板不自动填充页面正文；参考模板可直接校验',()=
 
 test('轻量配置再次编辑可保存；已有 API 身份和捕获类别不能被改写',()=>{
  const name='assertProfileIdentityUnchanged';
- const helper=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+`return typeof ${name}==='function'?${name}:null;})();`)();
+ const helper=require('../.generated/test-core.cjs')[name];
  assert.equal(typeof helper,'function');
  const old=core.validateSiteProfile(profile('text')),next=core.validateSiteProfile({...profile('text'),draft:{titleTemplate:'新：{{pageTitle}}'}});
  assert.doesNotThrow(()=>helper(old,next));assert.doesNotThrow(()=>helper(old,core.validateSiteProfile(profile('blank'))));
@@ -51,7 +51,7 @@ test('轻量配置再次编辑可保存；已有 API 身份和捕获类别不能
 });
 
 test('编辑中的轻量草稿跨页面保留时，来源和默认标签仍属于原捕获配置',()=>{
- const helper=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return typeof manualDraftContext===\'function\'?manualDraftContext:null;})();')();
+ const helper=require('../.generated/test-core.cjs').manualDraftContext;
  assert.equal(typeof helper,'function');
  const old=core.validateSiteProfile({...profile('text'),defaultLabel:{mode:'none'}});
  const draft=core.buildPageCaptureDraft(old,{title:'页面A',url:'https://docs.example.test/docs/a',text:'原选区'});
@@ -63,7 +63,7 @@ test('编辑中的轻量草稿跨页面保留时，来源和默认标签仍属�
 
 test('轻量草稿编辑后切入同站 API 页面，真实下一步仍携带旧草稿来源',async()=>{
  const start=source.indexOf("    $('next').onclick = () => run(async () => {");const end=source.indexOf("    $('new-blank-task').onclick",start);
- const helpers=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return {capturePreferences,manualDraftContext,buildTypedManualDraft,snapshotTaskDraft};})();')();
+ const helpers=require('../.generated/test-core.cjs');
  const result=await new Function('helpers',`
  const {capturePreferences,manualDraftContext,buildTypedManualDraft,snapshotTaskDraft}=helpers;
  const values=Object.fromEntries(['next','capture-record','capture-title','capture-description','task-title','task-description','task-source','task-attachment-mode','source-attachments'].map(id=>[id,{value:''}]));
