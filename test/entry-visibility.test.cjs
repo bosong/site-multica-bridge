@@ -63,12 +63,12 @@ test('编辑中的轻量草稿跨页面保留时，来源和默认标签仍属�
 
 test('轻量草稿编辑后切入同站 API 页面，真实下一步仍携带旧草稿来源',async()=>{
  const start=source.indexOf("    $('next').onclick = () => run(async () => {");const end=source.indexOf("    $('new-blank-task').onclick",start);
- const helpers=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return {manualDraftContext,buildTypedManualDraft,snapshotTaskDraft};})();')();
+ const helpers=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return {capturePreferences,manualDraftContext,buildTypedManualDraft,snapshotTaskDraft};})();')();
  const result=await new Function('helpers',`
- const {manualDraftContext,buildTypedManualDraft,snapshotTaskDraft}=helpers;
- const values=Object.fromEntries(['next','capture-record','capture-title','capture-description','task-title','task-description','task-source','task-attachment-mode'].map(id=>[id,{value:''}]));
+ const {capturePreferences,manualDraftContext,buildTypedManualDraft,snapshotTaskDraft}=helpers;
+ const values=Object.fromEntries(['next','capture-record','capture-title','capture-description','task-title','task-description','task-source','task-attachment-mode','source-attachments'].map(id=>[id,{value:''}]));
  values['capture-title'].value='页面A的编辑';values['capture-description'].value='页面A的内容';const $=id=>values[id];
- const siteMode='custom',bugs=new Map(),capturedRecords=new Map(),activeProfile={id:'api-b'},location={href:'https://docs.example.test/issues'};
+ const config={},siteMode='custom',bugs=new Map(),capturedRecords=new Map(),activeProfile={id:'api-b'},location={href:'https://docs.example.test/issues'};
  let activeDraft={siteId:'manual',sourceUrl:'https://docs.example.test/docs/a',captureProfile:{id:'text-a',captureMode:'text'},title:'页面A',description:'原内容'},taskDraft=null,selectedAttachments=[],attachmentDraftKey='';
  const run=fn=>fn(),renderSelectedAttachments=()=>{},message=()=>{},applyTaskDefaultLabel=()=>{},switchTab=()=>{};
  ${source.slice(start,end)}

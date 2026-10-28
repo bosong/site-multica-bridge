@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const source=fs.readFileSync(require.resolve('../bugdone-multica.user.js'),'utf8');
-const names=['manualDraftContext','buildManualDraft','buildTypedManualDraft','snapshotTaskDraft','validateStoredConfig','validateConfig','validateSiteProfile','buildCapturedDraft','buildIssueBody','PROFILE_TEMPLATE'];
+const names=['capturePreferences','manualDraftContext','buildManualDraft','buildTypedManualDraft','snapshotTaskDraft','validateStoredConfig','validateConfig','validateSiteProfile','buildCapturedDraft','buildIssueBody','PROFILE_TEMPLATE'];
 const core=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+
  `return {${names.map(n=>`${n}:typeof ${n}==='undefined'?undefined:${n}`).join(',')}};})();`)();
 
@@ -52,10 +52,10 @@ test('文本选取或空白手动草稿再次填写时，下一步使用当前�
  const begin=source.indexOf("    $('next').onclick = () => run(async () => {");
  const end=source.indexOf("    $('new-blank-task').onclick",begin);
  const execute=new Function('core','title','description','previous',`
- const {buildTypedManualDraft,snapshotTaskDraft,manualDraftContext}=core;
- const values=Object.fromEntries(['next','capture-record','capture-title','capture-description','task-title','task-description','task-source','task-attachment-mode'].map(id=>[id,{value:''}]));
+ const {buildTypedManualDraft,snapshotTaskDraft,manualDraftContext,capturePreferences}=core;
+ const values=Object.fromEntries(['next','capture-record','capture-title','capture-description','task-title','task-description','task-source','task-attachment-mode','source-attachments'].map(id=>[id,{value:''}]));
  values['capture-title'].value=title;values['capture-description'].value=description;const $=id=>values[id];
- const siteMode='manual',bugs=new Map(),capturedRecords=new Map(),activeProfile=null,location={href:'https://example.test/page'};
+ const config={},siteMode='manual',bugs=new Map(),capturedRecords=new Map(),activeProfile=null,location={href:'https://example.test/page'};
  let activeDraft={siteId:'manual',draftId:'old-draft',title:'旧标题',description:'旧内容',attachments:[]},taskDraft=previous,selectedAttachments=[],attachmentDraftKey='';
  const run=fn=>fn(),renderSelectedAttachments=()=>{},message=()=>{},applyTaskDefaultLabel=()=>{},switchTab=()=>{};
  ${source.slice(begin,end)}
