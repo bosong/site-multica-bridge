@@ -131,7 +131,7 @@ npm run test:watch  # 独立验证真实监听重建；请勿与其他构建/测
 | `src/ui/` | 面板挂载、HTML、CSS、入口位置计算 |
 | `scripts/build.mjs` | Node.js + esbuild 构建、校验和开发监听 |
 
-`package.json` 是版本号的唯一来源，构建自动生成头部与运行时版本。安装文件名、更新地址、namespace、存储键和查重身份沿用旧版本。正式产物没有运行时 import、CDN 依赖或 eval/new Function；页面世界注入代码独立打包，不依赖主 bundle 中的函数名。
+`package.json` 是版本号的唯一来源，构建自动生成头部与运行时版本。安装文件名及更新地址统一为 `site-multica.user.js`；namespace、存储键和查重身份沿用旧版本。正式产物没有运行时 import、CDN 依赖或 eval/new Function；页面世界注入代码独立打包，不依赖主 bundle 中的函数名。
 
 开发监听使用 750ms 源文件轮询，避免 Mac 文件句柄限制。正式脚本采用原子替换写入；开发 map、测试 bundle 和构建分析文件位于忽略提交的 `.generated/`。需要查看源码映射时使用 `.generated/dev/site-multica.user.js` 及相邻 map，正式安装产物不包含本机路径。
 
@@ -142,3 +142,11 @@ npm run test:watch  # 独立验证真实监听重建；请勿与其他构建/测
 3.0.0 验证：150 项测试通过；`npm run check`、离线 `npm ci`、重复构建字节一致及真实 watch 重建测试通过。Ego Lite 已验证捕获暂停恢复、站点双向开关、附件和处理列表跨站流程，测试均使用合成数据。
 
 预览素材更新：运行 `node scripts/render_readme_previews.mjs /tmp/site-multica-readme-previews`，使用 Ego Lite 渲染 `profiles.html`、`task.html`、`sidebar.html`，替换 assets 中对应图片。只使用合成数据，不连接 API。
+
+## 使用声明与免责声明
+
+本项目采用 [MIT License](./LICENSE)，是独立开发的第三方工具，与 Multica、BugDone、友盟、GitHub 等平台无官方关联，相关商标归各自权利人所有。
+
+请仅处理已获授权的数据，并遵守适用法律及平台条款。提交内容、日志和附件可能发送至所配置的服务及智能体，请先检查敏感信息。软件按“现状”提供，不作任何担保；责任限制以 MIT 许可证及适用法律为准。
+
+如对本项目的内容、标识或使用方式存在权利争议，请[提交 Issue](https://github.com/bosong/site-multica-bridge/issues)或联系作者，说明具体情况，我们将核实并视情况更正或移除相关内容。
