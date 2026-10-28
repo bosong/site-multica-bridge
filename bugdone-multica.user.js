@@ -809,6 +809,15 @@
     }
     return latest;
   }
+  function fitLaunchPosition(position, size, viewport) {
+    const axis = (value, start, extent, length) => {
+      const margin = Math.min(8, Math.max(0, (extent - length) / 2));
+      const minimum = start + margin, maximum = Math.max(minimum, start + extent - length - margin);
+      return Math.min(maximum, Math.max(minimum, Number.isFinite(Number(value)) ? Number(value) : minimum));
+    };
+    return { left: axis(position.left, viewport.left || 0, viewport.width, size.width),
+      top: axis(position.top, viewport.top || 0, viewport.height, size.height) };
+  }
   function installRouteHooks(page, changed) {
     const restores = [];
     const notify = () => { try { changed(); } catch (_) { /* 监听失败不能阻断源站路由 */ } };
@@ -2156,7 +2165,7 @@
       button,input,select,textarea{font:inherit} button{cursor:pointer;border:1px solid transparent;border-radius:10px;background:#2563eb;color:#fff;padding:10px 16px;font-weight:600;transition:background .15s,box-shadow .15s}
       button:hover{background:#1d4ed8} button:disabled{opacity:.5;cursor:wait} button:focus-visible,a:focus-visible{outline:3px solid #93c5fd;outline-offset:3px}
       #launch{position:fixed;right:24px;bottom:28px;z-index:2147483646;display:flex;align-items:center;gap:7px;padding:11px 17px;background:linear-gradient(to right,#fff,#F5F7FA,#EEF2F6,#E6EBF2);box-shadow:0 0 5px #00000024;color:#475569;font-size:14px;border:1px solid #e2e8f0;border-radius:10px;touch-action:none;user-select:none}
-      #launch:hover{background:linear-gradient(to right,#fff,#F5F7FA,#EEF2F6);box-shadow:0 4px 18px #47556926} #launch img{width:22px;height:22px;object-fit:contain} .status-dot{width:6px;height:6px;border-radius:50%;background:#22c55e}
+      #launch{width:max-content;max-width:calc(100vw - 16px)}#launch:hover{background:linear-gradient(to right,#fff,#F5F7FA,#EEF2F6);box-shadow:0 4px 18px #47556926} #launch img{width:22px;height:22px;object-fit:contain} .status-dot{width:6px;height:6px;border-radius:50%;background:#22c55e}
       #panel{position:fixed;right:24px;top:24px;bottom:88px;width:min(680px,calc(100vw - 48px));z-index:2147483647;display:flex;flex-direction:column;background:#f7f8fc;border:1px solid #e1e5ee;border-radius:20px;box-shadow:0 20px 70px #1e293b35;overflow:hidden}
       header{display:flex;justify-content:space-between;align-items:center;padding:23px 24px 18px;background:#fff;gap:12px}.brand{display:flex;align-items:center;gap:12px}.brand-icon{width:42px;height:42px;padding:9px;border:1px solid #dbeafe;border-radius:13px;background:#eff6ff}.brand h2{font-size:19px;line-height:1.3;margin:0;letter-spacing:-.4px}.brand small{font-size:12px;color:#8993a3}.icon-button{background:#f4f5f8;color:#677489;font-size:22px;line-height:1;padding:8px 12px}.icon-button:hover{background:#e8eaf0}
       .tabs{display:flex;padding:0 24px;gap:20px;background:#fff;border-bottom:1px solid #e7eaf1;overflow-x:auto;scrollbar-width:thin}.tabs button{flex:none;border:0;border-bottom:3px solid transparent;border-radius:0;padding:13px 2px;color:#7c8697;background:transparent;white-space:nowrap}.tabs button[aria-selected=true]{color:#2563eb;border-bottom-color:#3b82f6}.tabs button:hover{color:#2563eb}
@@ -2372,10 +2381,31 @@
     }
     showShortcut();
     const launch = $('launch');
-    if (launchPosition && Number.isFinite(Number(launchPosition.left)) && Number.isFinite(Number(launchPosition.top))) {
-      launch.style.left = `${Number(launchPosition.left)}px`; launch.style.top = `${Number(launchPosition.top)}px`; launch.style.right = 'auto'; launch.style.bottom = 'auto';
-    }
     let drag = null, suppressLaunchClick = false;
+    const launchViewport = () => ({
+      left: window.visualViewport?.offsetLeft || 0, top: window.visualViewport?.offsetTop || 0,
+      width: window.visualViewport?.width || window.innerWidth, height: window.visualViewport?.height || window.innerHeight
+    });
+    const placeLaunch = position => {
+      launch.style.left = `${position.left}px`; launch.style.top = `${position.top}px`;
+      launch.style.right = 'auto'; launch.style.bottom = 'auto';
+    };
+    function constrainLaunch(reason, requested) {
+      if (drag && !requested) return;
+      const rect = launch.getBoundingClientRect(), viewport = launchViewport();
+      if (!rect.width || !rect.height || !viewport.width || !viewport.height) return;
+      const before = requested || rect, position = fitLaunchPosition(before, rect, viewport);
+      const corrected = Math.abs(position.left - before.left) > .5 || Math.abs(position.top - before.top) > .5;
+      if (requested || corrected) placeLaunch(position);
+      if (corrected) {
+        launchPosition = position;
+        try { writeValue('launchPosition', position); } catch (_) { /* 当前页面仍保持可见位置 */ }
+        debug('入口位置已自动校正', { reason, previous: { left: before.left, top: before.top }, position, viewport });
+      }
+    }
+    if (launchPosition && Number.isFinite(Number(launchPosition.left)) && Number.isFinite(Number(launchPosition.top))) {
+      constrainLaunch('restore', { left: Number(launchPosition.left), top: Number(launchPosition.top) });
+    }
     launch.addEventListener('pointerdown', e => {
       if (e.button !== undefined && e.button !== 0) return;
       const rect = launch.getBoundingClientRect(); launch.setPointerCapture?.(e.pointerId);
@@ -2385,18 +2415,21 @@
       if (!drag || e.pointerId !== drag.pointerId) return;
       if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4) drag.moved = true;
       if (!drag.moved) return;
-      const maxX = Math.max(0, window.innerWidth - launch.offsetWidth), maxY = Math.max(0, window.innerHeight - launch.offsetHeight);
-      const left = Math.min(maxX, Math.max(0, e.clientX - drag.dx)), top = Math.min(maxY, Math.max(0, e.clientY - drag.dy));
-      launch.style.left = `${left}px`; launch.style.top = `${top}px`; launch.style.right = 'auto'; launch.style.bottom = 'auto';
+      placeLaunch(fitLaunchPosition({ left: e.clientX - drag.dx, top: e.clientY - drag.dy }, launch.getBoundingClientRect(), launchViewport()));
     });
     launch.addEventListener('pointerup', e => {
       if (!drag || e.pointerId !== drag.pointerId) return;
       if (drag.moved) { suppressLaunchClick = true; try { writeValue('launchPosition', { left: launch.getBoundingClientRect().left, top: launch.getBoundingClientRect().top }); } catch (_) {} setTimeout(() => { suppressLaunchClick = false; }, 0); }
       drag = null;
+      constrainLaunch('drag-end');
     });
+    launch.addEventListener('pointercancel', () => { drag = null; constrainLaunch('drag-cancel'); });
     launch.onclick = () => { if (suppressLaunchClick) return; if (launch.getAttribute('aria-expanded') === 'true') closePanel(); else { openPanel(); root.querySelector('[role=tab][aria-selected=true]').focus(); } };
     $('close').onclick = () => { closePanel(); $('launch').focus(); };
-    window.addEventListener('resize', () => syncPageLayout($('launch').getAttribute('aria-expanded') === 'true'));
+    window.addEventListener('resize', () => { syncPageLayout($('launch').getAttribute('aria-expanded') === 'true'); constrainLaunch('window-resize'); });
+    window.visualViewport?.addEventListener('resize', () => constrainLaunch('viewport-resize'));
+    window.visualViewport?.addEventListener('scroll', () => constrainLaunch('viewport-scroll'));
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => constrainLaunch('button-resize')).observe(launch);
     $('panel').addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
       e.stopPropagation();
@@ -2691,6 +2724,7 @@
     if (storageFailed) message('浏览器存储不可用，请允许当前网站保存数据后刷新。');
     debug('界面挂载完成', { buttonConnected: host.isConnected, capturedBugs: bugs.size });
     requestAnimationFrame(() => {
+      constrainLaunch('initial-layout');
       const rect = launch.getBoundingClientRect(), style = getComputedStyle(launch);
       const inViewport = rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
       const visible = launch.isConnected && rect.width > 0 && rect.height > 0 && inViewport &&
@@ -2702,7 +2736,7 @@
       debug(visible && !covered ? '入口已显示' : '入口未显示或被遮挡', {
         buttonConnected: launch.isConnected, visible, inViewport, covered,
         position: { left: Math.round(rect.left), top: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height) },
-        zIndex: style.zIndex, connectionState: connectionPhase
+        viewport: { width: innerWidth, height: innerHeight }, zIndex: style.zIndex, connectionState: connectionPhase
       }, visible && !covered ? 'info' : 'warn');
     });
     if (config.token && config.api) void run(connectIfNeeded);
