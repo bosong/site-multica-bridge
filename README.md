@@ -1,6 +1,6 @@
 # Site → Multica Bridge
 
-将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v2.3.0** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
+将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v2.3.1** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
 
 ## 界面预览
 
