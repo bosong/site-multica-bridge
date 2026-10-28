@@ -2,13 +2,15 @@ const {test}=require('node:test');const assert=require('node:assert/strict');con
 const root=path.resolve(__dirname,'..');
 test('3.0可构建为唯一单文件，保留元数据及无外部模块依赖',()=>{
  execFileSync(process.execPath,['scripts/build.mjs'],{cwd:root,stdio:'pipe'});
- const script=fs.readFileSync(path.join(root,'bugdone-multica.user.js'),'utf8');
+ assert.ok(fs.existsSync(path.join(root,'site-multica.user.js')),'build must emit site-multica.user.js');
+ assert.equal(fs.existsSync(path.join(root,'bugdone-multica.user.js')),false,'obsolete installation artifact must be removed');
+ const script=fs.readFileSync(path.join(root,'site-multica.user.js'),'utf8');
  assert.ok(script.startsWith('// ==UserScript=='));assert.equal((script.match(/==UserScript==/g)||[]).length,1);assert.match(script,/@version\s+3\.0\.0/);
  for(const name of ['GM_xmlhttpRequest','GM_getValue','GM_setValue','unsafeWindow']) assert.ok(script.includes('// @grant        '+name));
- assert.ok(script.includes('https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js'));
+ for(const key of ['updateURL','downloadURL']) assert.match(script,new RegExp('^// @'+key+'\\s+https://raw\\.githubusercontent\\.com/bosong/site-multica-bridge/main/site-multica\\.user\\.js$','m'));
  assert.equal(/\bimport\s*(?:\(|\{)|\brequire\s*\(|new Function\(|\beval\(/.test(script),false);new vm.Script(script);
  assert.equal(script.includes('/Users/songbo/'),false);
- const first=script;execFileSync(process.execPath,['scripts/build.mjs'],{cwd:root,stdio:'pipe'});assert.equal(fs.readFileSync(path.join(root,'bugdone-multica.user.js'),'utf8'),first);
+ const first=script;execFileSync(process.execPath,['scripts/build.mjs'],{cwd:root,stdio:'pipe'});assert.equal(fs.readFileSync(path.join(root,'site-multica.user.js'),'utf8'),first);
 });
 test('页面世界脚本独立执行，不依赖主bundle变量名',()=>{
  const code=fs.readFileSync(path.join(root,'.generated/page-world.txt'),'utf8');const window={};

@@ -3,8 +3,8 @@
 // @namespace    local.site.multica
 // @version      3.0.0
 // @description  多站点信息捕获与 Multica 智能体任务桥接
-// @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
-// @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
+// @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/site-multica.user.js
+// @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/site-multica.user.js
 // @match        https://*/*
 // @run-at       document-start
 // @fastlane-network

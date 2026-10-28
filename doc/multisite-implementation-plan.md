@@ -26,7 +26,7 @@
 
 **架构：** 站点 profile 只声明页面、响应与提取规则；捕获运行时把命中内容归一为 `CapturedRecord`，再生成可编辑的 `TaskDraft`。任务创建服务只读取最终草稿和稳定 `sourceKey`，不认识 BugDone 或友盟字段。站点写入动作独立，默认关闭。
 
-**技术栈：** 原生 JavaScript 用户脚本、Node.js 内置测试运行器、Tampermonkey、FastlaneTool Mac WebView。发布物仍是单个 `bugdone-multica.user.js`，不引入运行时依赖。
+**技术栈：** 原生 JavaScript 用户脚本、Node.js 内置测试运行器、Tampermonkey、FastlaneTool Mac WebView。发布物仍是单个 `site-multica.user.js`，不引入运行时依赖。
 
 **核心数据契约：** `CapturedRecord` 至少含 `siteId/scopeId/recordId/pageKind/sourceUrl/title/descriptionBlocks/attachments/logs/fieldSources/capturedAt/completeness`；`TaskDraft` 至少含 `sourceKey/title/description/attachments/workspaceId/projectId/agentId/status/priority/labelIds/dates`。`sourceKey` 用站点、范围和记录 ID 的长度前缀编码生成，避免分隔符碰撞；用户可见的搜索标记由该键生成，业务标题和正文在第一栏组装。
 
@@ -55,7 +55,7 @@
 | `scripts/build.cjs` | 将源码构建成单个用户脚本并校验元数据 |
 | `test/fixtures/` | BugDone 与友盟的合成列表、详情、日志样本 |
 | `test/*.test.cjs` | 纯逻辑、构建、提交和 UI 状态回归测试 |
-| `bugdone-multica.user.js` | 唯一安装产物；构建生成，不手工维护双份逻辑 |
+| `site-multica.user.js` | 唯一安装产物；构建生成，不手工维护双份逻辑 |
 
 文件组织可在首个拆分提交中微调，但模块职责与单文件发布物必须保持。FastlaneTool 的原生桥代码属于另一个仓库，应另行提交并与用户脚本做联调。
 

@@ -2,7 +2,7 @@
 
 ## 源码、产物和版本
 
-`src/index.js` 是唯一浏览器启动入口。`scripts/build.mjs` 从 package.json 读取版本，先生成独立页面世界 bundle，再生成一个 IIFE 用户脚本。`src/userscript.meta.txt` 管理权限及安装元数据；版本占位由构建替换。根目录 `bugdone-multica.user.js` 是生成产物，不能手工维护第二份逻辑。
+`src/index.js` 是唯一浏览器启动入口。`scripts/build.mjs` 从 package.json 读取版本，先生成独立页面世界 bundle，再生成一个 IIFE 用户脚本。`src/userscript.meta.txt` 管理权限及安装元数据；版本占位由构建替换。根目录 `site-multica.user.js` 是生成产物，不能手工维护第二份逻辑。
 
 `src/core/index.js` 是纯逻辑公共出口。站点配置、匹配、归一化、草稿、查重及偏好按职责分文件，使用标准 import/export。核心模块导入时不读浏览器存储或发请求；HTML 清理等浏览器能力只在函数被调用时使用。
 

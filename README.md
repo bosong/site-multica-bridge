@@ -14,13 +14,13 @@
 
 ## 安装与升级
 
-1. [安装最新版用户脚本](https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js)。更新内容见 [CHANGELOG](./CHANGELOG.md)。
+1. [安装最新版用户脚本](https://raw.githubusercontent.com/bosong/site-multica-bridge/main/site-multica.user.js)。更新内容见 [CHANGELOG](./CHANGELOG.md)。
 2. 在油猴中启用脚本并刷新目标网页，点击 **Multica-AI** 入口。按钮显示未配置、待连接、连接中、已连接或连接失败。
 3. 在「设置 → 基础配置」选择官方 API 或添加自建服务器，填写 API Token，自动保存后点击“手动连接 / 刷新”验证并读取选项。再次打开匹配页面会按已保存配置自动连接，目录会缓存，手动刷新可重新读取。
 4. 设置默认工作区、项目、智能体和可选标签。项目、标签和日期可以留空；明确清空的默认选项不会在刷新后自动选回第一项。各选项自动保存；令牌停止输入或失焦后保存，清空令牌及默认选项也会保存。
 5. 在「信息捕获」核对来源、标题、内容与附件，点击底部固定的 **下一步：AI任务创建**。第二栏的最终标题、描述和任务选项就是提交值。
 
-v2.0.0 的脚本名称为「Site 接入 Multica」，`@namespace` 改为 `local.site.multica`，`@description` 为「多站点信息捕获与 Multica 智能体任务桥接」，更新与下载 URL 指向新仓库。安装文件名仍为 `bugdone-multica.user.js`，使旧路径在仓库改名后仍能找到发布物；内部存储键和 BugDone 查重标记保持兼容，不随项目改名重置。
+v2.0.0 的脚本名称为「Site 接入 Multica」，`@namespace` 改为 `local.site.multica`，`@description` 为「多站点信息捕获与 Multica 智能体任务桥接」，更新与下载 URL 指向新仓库。3.0.0 的安装文件名改为 `site-multica.user.js`，安装、更新及下载地址同步使用新文件名。已安装旧路径脚本的用户需重新安装本版本，以更新油猴中的更新地址；内部存储键和 BugDone 查重标记保持兼容，不随文件改名重置。
 
 升级时建议在原有脚本编辑器中全选覆盖并保存，再刷新网页；不要同时启用新旧两份脚本。脚本管理器若把新名称/namespace 视为独立安装，其私有存储可能无法自动沿用，需要重新填写连接配置或导入已导出的站点规则。Mac 原生存储改用新 namespace；当原生桥已提供旧 namespace 数据时会迁移，当前网站旧本地值也会迁入新空间。桥未提供旧空间且没有本地副本时，需要重新配置，脚本不会绕过宿主的存储隔离。
 
@@ -116,7 +116,7 @@ npm run check       # 校验语法、元数据及产物是否与当前源码一�
 npm run test:watch  # 独立验证真实监听重建；请勿与其他构建/测试并行
 ```
 
-用户仍然只安装根目录的 `bugdone-multica.user.js`。开发时修改 `src/`，不要手工编辑生成文件。修改后运行构建，提交源码、锁文件与生成产物；`npm run check` 会拒绝陈旧产物。分支开发时，README 的正式安装链接仍指向 main，测试当前分支应安装其本地构建产物。
+用户仍然只安装根目录的 `site-multica.user.js`。开发时修改 `src/`，不要手工编辑生成文件。修改后运行构建，提交源码、锁文件与生成产物；`npm run check` 会拒绝陈旧产物。分支开发时，README 的正式安装链接仍指向 main，测试当前分支应安装其本地构建产物。
 
 | 位置 | 职责 |
 |---|---|
@@ -133,7 +133,7 @@ npm run test:watch  # 独立验证真实监听重建；请勿与其他构建/测
 
 `package.json` 是版本号的唯一来源，构建自动生成头部与运行时版本。安装文件名、更新地址、namespace、存储键和查重身份沿用旧版本。正式产物没有运行时 import、CDN 依赖或 eval/new Function；页面世界注入代码独立打包，不依赖主 bundle 中的函数名。
 
-开发监听使用 750ms 源文件轮询，避免 Mac 文件句柄限制。正式脚本采用原子替换写入；开发 map、测试 bundle 和构建分析文件位于忽略提交的 `.generated/`。需要查看源码映射时使用 `.generated/dev/bugdone-multica.user.js` 及相邻 map，正式安装产物不包含本机路径。
+开发监听使用 750ms 源文件轮询，避免 Mac 文件句柄限制。正式脚本采用原子替换写入；开发 map、测试 bundle 和构建分析文件位于忽略提交的 `.generated/`。需要查看源码映射时使用 `.generated/dev/site-multica.user.js` 及相邻 map，正式安装产物不包含本机路径。
 
 核心测试加载实际模块导出；服务测试直接加载 ES 模块。部分旧事件绑定测试暂时保留源码片段适配，读取的是当前模块，不保存旧版业务代码；实际构建产物另经 Ego Lite 合成数据集成验证。
 

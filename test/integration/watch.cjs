@@ -1,6 +1,6 @@
 // Standalone: mutates a source constant temporarily, so never run concurrently with unit tests.
 const fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');const {spawn,execFileSync}=require('node:child_process');const {createHash}=require('node:crypto');
-const root=path.resolve(__dirname,'../..'),file=path.join(root,'src/config/constants.js'),artifact=path.join(root,'bugdone-multica.user.js');
+const root=path.resolve(__dirname,'../..'),file=path.join(root,'src/config/constants.js'),artifact=path.join(root,'site-multica.user.js');
 (async()=>{const original=await fs.readFile(file,'utf8');execFileSync(process.execPath,['scripts/build.mjs'],{cwd:root,stdio:'pipe'});const digest=data=>createHash('sha256').update(data).digest('hex'),before=digest(await fs.readFile(artifact));
  const child=spawn(process.execPath,['scripts/build.mjs','--watch'],{cwd:root,stdio:['ignore','pipe','pipe']});let output='',errors='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>errors+=data);
  const wait=predicate=>new Promise((resolve,reject)=>{const deadline=Date.now()+20000;const timer=setInterval(()=>{if(predicate()){clearInterval(timer);resolve();}else if(child.exitCode!==null||Date.now()>deadline){clearInterval(timer);reject(Error(errors||'Watch timeout'));}},50);});

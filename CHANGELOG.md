@@ -3,7 +3,7 @@
 ## 3.0.0 — 2026-10-28
 
 - 单文件开发改为 ES modules：拆分核心规则、站点适配、存储、请求、附件服务、历史筛选及 UI 模板/样式/挂载。
-- 新增 Node.js + esbuild 构建，仍生成兼容原安装地址的 `bugdone-multica.user.js`，保留原有功能和存储身份。
+- 新增 Node.js + esbuild 构建，统一生成 `site-multica.user.js`，同步安装链接及 updateURL/downloadURL，保留原有功能和存储身份。
 - package.json 统一版本，新增 build/dev/check 与锁文件；正式产物可读、可复现、原子写入，不包含远程模块加载或本机路径。
 - 页面世界注入单独打包，替代跨模块 Function.toString 拼装，避免构建改名破坏注入。
 - 核心测试迁移到实际模块导出，补充真实服务模块、元数据、构建复现、页面注入和监听重建验证。

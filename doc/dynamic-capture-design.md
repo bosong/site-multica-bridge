@@ -26,7 +26,7 @@
 
 ## 2. 现状与必须保留的行为
 
-当前脚本在 `bugdone-multica.user.js` 中实现：
+当前脚本在 `site-multica.user.js` 中实现：
 
 | 能力 | 现状 | 迁移要求 |
 | --- | --- | --- |
@@ -249,7 +249,7 @@ Mac WebView 当前原生桥的通用请求体限 1 MiB，`sourceUrl` 转传只�
 | `site-actions` | 经许可的站点特有后置动作 | 不在通用提交流程里硬编码站点写接口 |
 | `ui` / `storage` | 五栏工作台、配置、处理列表与本地记录 | 不解析站点私有 API |
 
-建议文件组织（实施时可按构建工具调整）：`src/capture/`、`src/profiles/bugdone/`、`src/profiles/umeng/`、`src/task/`、`src/ui/`、`test/fixtures/`，输出仍是仓库根目录的 `bugdone-multica.user.js`。每个 profile 配小型**脱敏或合成**响应样本；真实用户日志和截图不得进入测试夹具、README 或仓库。
+建议文件组织（实施时可按构建工具调整）：`src/capture/`、`src/profiles/bugdone/`、`src/profiles/umeng/`、`src/task/`、`src/ui/`、`test/fixtures/`，输出仍是仓库根目录的 `site-multica.user.js`。每个 profile 配小型**脱敏或合成**响应样本；真实用户日志和截图不得进入测试夹具、README 或仓库。
 
 ## 9. 分阶段实施与可验收交付
 

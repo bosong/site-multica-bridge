@@ -15,13 +15,13 @@ export async function buildAll(){
  if(!code.startsWith('// ==UserScript==')||(code.match(/==UserScript==/g)||[]).length!==1)throw Error('Invalid userscript metadata');
  if(/\bimport\s*(?:\(|\{)|\brequire\s*\(|new Function\(|\beval\(/.test(code))throw Error('Runtime module loading is not allowed');
  if(code.includes(root))throw Error('Absolute build path leaked into release');
- if(checking){const current=await readFile(path.join(root,'bugdone-multica.user.js'),'utf8');if(current!==code)throw Error('Generated userscript is stale. Run npm run build.');}
- else await save('bugdone-multica.user.js',code);
+ if(checking){const current=await readFile(path.join(root,'site-multica.user.js'),'utf8');if(current!==code)throw Error('Generated userscript is stale. Run npm run build.');}
+ else await save('site-multica.user.js',code);
  const core=await build({absWorkingDir:root,entryPoints:['src/core/index.js'],bundle:true,platform:'node',format:'cjs',target:'node22',write:false,logLevel:'warning'});
  await save('.generated/test-core.cjs',core.outputFiles[0].text);
  await save('.generated/metafile.json',JSON.stringify(result.metafile,null,2)+'\n');
- if(watching)await build({...base,entryPoints:['src/index.js'],loader:{'.css':'text','.html':'text','.txt':'text'},banner:{js:banner},sourcemap:'external',outfile:'.generated/dev/bugdone-multica.user.js'});
- console.log(`${checking?'Checked':'Built'} v${pkg.version}: bugdone-multica.user.js (${Buffer.byteLength(code)} bytes)`);
+ if(watching)await build({...base,entryPoints:['src/index.js'],loader:{'.css':'text','.html':'text','.txt':'text'},banner:{js:banner},sourcemap:'external',outfile:'.generated/dev/site-multica.user.js'});
+ console.log(`${checking?'Checked':'Built'} v${pkg.version}: site-multica.user.js (${Buffer.byteLength(code)} bytes)`);
 }
 await buildAll();
 if(watching){
