@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site 接入 Multica
 // @namespace    local.site.multica
-// @version      2.1.1
+// @version      2.1.2
 // @description  多站点信息捕获与 Multica 智能体任务桥接
 // @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
 // @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
@@ -157,11 +157,11 @@
     return `[BugDone] #${b.BugCode} ${b.BugTitle} ${marker(b.BugId)}`;
   }
   const isBugAPI = (value, method = 'POST') => !!matchSiteCapture(BUGDONE_PROFILE, { url: value, method });
-  function parseResponse(value, profile = BUGDONE_PROFILE) {
+  function parseResponse(value, profile = BUGDONE_PROFILE, context = {}) {
     return extractProfileItems(profile.captures[0], value).filter(({ item: b }) =>
       b && BUGID.test(b.BugId || '') && typeof b.BugTitle === 'string'
     ).map(({ item: b, kind }) => {
-      const record=normalizeCapturedRecord(profile,b,{kind});
+      const record=normalizeCapturedRecord(profile,b,{...context,kind});
       return ({
       BugId: String(record?.recordId || b.BugId).toLowerCase(), BugCode: record?.number ?? b.BugCode, BugTitle: record?.title || b.BugTitle,
       captureRecord:record,
@@ -171,7 +171,7 @@
       Description: typeof b.Description === 'string' ? b.Description : '',
       Environment: b.Environment || '', PicCount: b.PicCount || 0,
       AttachmentCount: b.AttachmentCount || 0,
-      detail: kind === 'detail', sourceUrl: '',
+      detail: kind === 'detail', sourceUrl: record?.sourceUrl || '',
       attachments: [...normalizeProfileAttachments(profile,b,{siteId:profile.id,scopeId:b.ProjectId,recordId:b.BugId,number:b.BugCode,title:b.BugTitle}).attachments.map(a=>({...a,image:!!a.remoteImage})), ...(Array.isArray(b.BugAccessoryList) ? b.BugAccessoryList : [])
         .filter(a => a && a.ActiveFlg !== false && a.FullFileUrl && !/^(png|jpe?g|gif|webp|bmp)$/i.test(a.ext || ''))
         .map(a => ({ url: safeURL(a.FullFileUrl), name: String(a.FileName || a.AccessoryName || a.FileUrl || '附件'), image: /^(png|jpe?g|gif|webp|bmp)$/i.test(a.ext || '') }))
@@ -584,6 +584,14 @@
     const title = field('title');
     // BugDone 的历史标题标记与缓存使用小写十六进制 ID。
     if (profile.adapter === 'bugdone') {
+      // 列表响应可能省略 ProjectId，仅从匹配的可信项目页面补全。
+      if (!scopeId) {
+        const page=locationOf(context.sourceUrl);
+        if (page && profile.allowedOrigins.includes(page.origin) && matchProfilePage(profile,page.href)) {
+          const candidate=profileRouteParams(profile,page.href)?.projectId || page.pathname.match(/^\/cn\/bugManagement_([a-f\d]{32})\/?$/i)?.[1];
+          if (BUGID.test(candidate || '')) scopeId=candidate;
+        }
+      }
       scopeId = typeof scopeId === 'string' ? scopeId.toLowerCase() : scopeId;
       recordId = typeof recordId === 'string' ? recordId.toLowerCase() : recordId;
     }
@@ -1160,7 +1168,7 @@
   }
   // 调试桩：仅打印阶段、数量和 HTTP 状态，不打印令牌、请求头或 Bug 正文。
   const DEBUG = true;
-  const SCRIPT_VERSION = '2.1.1';
+  const SCRIPT_VERSION = '2.1.2';
   function debug(stage, data = {}, level = 'info') {
     if (DEBUG) console[level](`[网页→Multica] ${stage}`, data);
   }
@@ -1379,7 +1387,7 @@
   }
   function collect(data) {
     try {
-      const items = parseResponse(data, activeProfile?.adapter === 'bugdone' ? activeProfile : BUGDONE_PROFILE);
+      const items = parseResponse(data, activeProfile?.adapter === 'bugdone' ? activeProfile : BUGDONE_PROFILE, {sourceUrl:location.href});
       const profile=activeProfile?.adapter === 'bugdone' ? activeProfile : BUGDONE_PROFILE;
       collectStandardRecords(profile, extractProfileItems(profile.captures[0], data), capturedRecords, location.href);
       debug('响应解析完成', { bugs: items.length, details: items.filter(b => b.detail).length });

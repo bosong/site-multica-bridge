@@ -1,6 +1,6 @@
 # Site → Multica Bridge
 
-将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v2.1.1** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
+将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v2.1.2** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
 
 ## 界面预览
 
@@ -99,3 +99,5 @@ v2.0.0 发布检查：102 项自动化测试通过；Ego Lite 已验证 BugDone 
 2.1.0 升级检查：114 项自动化测试通过，Ego Lite 已验证入口范围、延迟挂载、快捷键与菜单、文本/空白模板和跨页面草稿保留。
 
 2.1.1 升级检查：118 项自动化测试通过，Ego Lite 已使用合成数据验证三个内置站点与手动任务的详情入口、旧记录降级和点击目标。
+
+2.1.2 修复 BugDone 列表省略 ProjectId 时提交内容预览为空；仅从可信且匹配的项目页面补全身份。121 项测试通过，并在 Ego Lite 验证列表项切换与来源、摘要预览。
