@@ -1,4 +1,8 @@
-"""Render a privacy-safe preview of the development UI (requires Pillow)."""
+"""Legacy 2.x illustration generator (requires Pillow).
+
+For 3.x README previews use render_readme_previews.mjs and render profiles.html
+in Ego Lite. This legacy illustration does not represent the current UI.
+"""
 
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont

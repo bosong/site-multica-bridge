@@ -4,9 +4,9 @@
 
 ## 界面预览
 
-![五栏工作台与站点配置示意](./assets/site-profiles-preview.png)
+![3.0.0 五栏工作台与站点配置示意](./assets/site-profiles-preview.png)
 
-当前工作台包含「信息捕获」「AI任务创建」「处理列表」「设置」「站点配置」五栏。下方两张根据 2.0.0 用户脚本的 HTML/CSS 生成离线示例页，由 Ego Lite 渲染截图，分别展示通用任务创建、侧边栏抽屉与 UI 设置。任务、项目、智能体、附件和链接均为合成数据。
+当前工作台包含「信息捕获」「AI任务创建」「处理列表」「设置」「站点配置」五栏。三张预览根据 3.0.0 模块源码中的实际 HTML/CSS 生成离线示例页，由 Ego Lite 渲染截图，分别展示站点配置、通用任务创建、侧边栏抽屉与 UI 设置。任务、项目、智能体、附件和链接均为合成数据。
 
 ![任务创建界面示意](./assets/ui-preview.png)
 
@@ -140,3 +140,5 @@ npm run test:watch  # 独立验证真实监听重建；请勿与其他构建/测
 详细边界见 [3.0 架构说明](./doc/architecture-v3.md)，阶段与当前步骤见 [3.0 实施计划](./doc/plans/2026-10-28-v3-modular-source.md)。
 
 3.0.0 验证：150 项测试通过；`npm run check`、离线 `npm ci`、重复构建字节一致及真实 watch 重建测试通过。Ego Lite 已验证捕获暂停恢复、站点双向开关、附件和处理列表跨站流程，测试均使用合成数据。
+
+预览素材更新：运行 `node scripts/render_readme_previews.mjs /tmp/site-multica-readme-previews`，使用 Ego Lite 渲染 `profiles.html`、`task.html`、`sidebar.html`，替换 assets 中对应图片。只使用合成数据，不连接 API。
