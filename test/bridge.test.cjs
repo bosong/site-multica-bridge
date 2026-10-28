@@ -128,7 +128,7 @@ test('选择默认标签后立即保存配置，并同步到任务创建页', ()
   for (const [id, element] of Object.entries(values)) element.addEventListener = (name, fn) => listeners.set(`${id}:${name}`, fn);
   const config = { label: '' };
   new Function('values', 'config', 'writeValue', 'message', 'debug',
-    `const $ = id => values[id],activeDraft=null,taskDraft=null,activeProfile=null; const applyTaskDefaultLabel=()=>{values['task-label'].value=values['default-label'].value;};\n${source.slice(start, end)}`)(values, config,
+    `const $ = id => values[id],root=null,activeDraft=null,taskDraft=null,activeProfile=null; ${source.slice(source.indexOf('  function persistConfig('),source.indexOf('  function persistConnectionSettings('))} const applyTaskDefaultLabel=()=>{values['task-label'].value=values['default-label'].value;};\n${source.slice(start, end)}`)(values, config,
     (key, value) => saved.push([key, value]), () => {}, () => {});
   listeners.get('default-label:change')();
   assert.equal(values['task-label'].value, values['default-label'].value);

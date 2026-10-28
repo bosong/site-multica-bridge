@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site 接入 Multica
 // @namespace    local.site.multica
-// @version      2.1.2
+// @version      2.2.0
 // @description  多站点信息捕获与 Multica 智能体任务桥接
 // @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
 // @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js
@@ -1142,6 +1142,14 @@
     return [event.ctrlKey && 'Ctrl', event.altKey && 'Alt', event.metaKey && 'Meta', event.shiftKey && 'Shift', key].filter(Boolean).join('+');
   }
   function shortcutMatches(event, shortcut) { return !!shortcut && shortcutFromEvent(event) === shortcut; }
+  function restorePreferenceDefaults(saved, workspaces = [], catalog = {}) {
+    const first = list => (Array.isArray(list) ? list : []).find(item=>item?.id && item.is_archived!==true);
+    const workspace=first(workspaces),project=workspace && first(catalog.projects),agent=workspace && first(catalog.agents);
+    return {api:saved.api,token:saved.token,umengCaptureEnabled:saved.umengCaptureEnabled ?? true,
+      workspace:workspace?.id || '',workspaceAlias:workspace?.name || '',project:project?.id || '',projectAlias:project?.name || '',
+      defaultAgent:agent?.id || '',agent:agent?.id || '',label:'',hideNativeAI:true,displayMode:'floating',entryVisibility:'configured',
+      shortcut:DEFAULT_SHORTCUT,shortcutCustomized:false,projectCustomized:false,defaultAgentCustomized:false};
+  }
   function normalizeShortcutConfig(saved) {
     return saved.shortcut === 'Alt+Shift+M' && saved.shortcutCustomized !== true
       ? { ...saved, shortcut: DEFAULT_SHORTCUT } : saved;
@@ -1168,7 +1176,7 @@
   }
   // 调试桩：仅打印阶段、数量和 HTTP 状态，不打印令牌、请求头或 Bug 正文。
   const DEBUG = true;
-  const SCRIPT_VERSION = '2.1.2';
+  const SCRIPT_VERSION = '2.2.0';
   function debug(stage, data = {}, level = 'info') {
     if (DEBUG) console[level](`[网页→Multica] ${stage}`, data);
   }
@@ -1369,6 +1377,7 @@
   }
   function closePanel() {
     closeAttachmentPreview();
+    if ($('reset-preferences-dialog')?.open) $('reset-preferences-dialog').close();
     const panel = $('panel');
     $('launch').setAttribute('aria-expanded', 'false');
     syncPageLayout(false);
@@ -1550,6 +1559,27 @@
   function settings(requireConnection = true) {
     const values = { api: $('api').value.trim(), workspace: $('workspace').value, workspaceAlias: $('workspace').selectedOptions[0]?.textContent || '', token: $('token').value, project: $('default-project').value, projectAlias: $('default-project').selectedOptions[0]?.textContent || '', agent: $('agent').value, defaultAgent: $('default-agent').value, label: $('default-label').value, hideNativeAI: $('hide-native-ai').checked, umengCaptureEnabled: config.umengCaptureEnabled, displayMode: config.displayMode, entryVisibility:config.entryVisibility, shortcut: config.shortcut, shortcutCustomized: config.shortcutCustomized, projectCustomized:config.projectCustomized, defaultAgentCustomized:config.defaultAgentCustomized };
     return requireConnection ? validateConfig(values) : validateStoredConfig(values);
+  }
+  function persistConfig(next = config) {
+    try {
+      writeValue('config',next);
+      if (root && $('settings-save-state')) {
+        const mode=typeof storageMode==='string' ? storageMode : '', limited=/会话|内存/.test(mode);
+        $('settings-save-state').textContent=mode.includes('内存')?'仅保存在当前页面':mode.includes('会话')?'已保存到当前会话':'已保存';
+        $('settings-save-state').dataset.kind=limited?'warning':'success';
+      }
+    } catch (error) {
+      if (root && $('settings-save-state')) { $('settings-save-state').textContent='保存失败，请重试';$('settings-save-state').dataset.kind='error'; }
+      throw error;
+    }
+  }
+  function persistConnectionSettings() {
+    const api=$('api').value==='__add__' ? config.api : $('api').value, changed=config.api!==api;
+    const next=validateStoredConfig({...config,api,token:$('token').value,
+      ...(changed ? {workspace:'',workspaceAlias:'',project:'',projectAlias:'',defaultAgent:'',agent:'',label:'',projectCustomized:false,defaultAgentCustomized:false} : {})});
+    persistConfig(next);
+    if(changed || config.token!==next.token) setConnectionPhase('idle');
+    config=next;
   }
   async function bugDoneForm(params) {
     const controller = new AbortController();
@@ -2123,7 +2153,7 @@
       await loadWorkspaceData(scoped);
       config = { ...config, ...scoped, workspace: selected, project: $('default-project').value,
         defaultAgent: $('default-agent').value, agent: $('agent').value, label: $('default-label').value };
-      writeValue('config', config);
+      persistConfig(config);
       writeValue(`workspaces:${c.api}`, workspaces);
       writeValue(`connection-tag:${c.api}`, tag);
       setConnectionPhase('connected', tag);
@@ -2146,7 +2176,7 @@
       applyCatalog(c, catalog);
       config = { ...config, ...c, project: $('default-project').value, defaultAgent: $('default-agent').value,
         agent: $('agent').value, label: $('default-label').value };
-      writeValue('config', config);
+      persistConfig(config);
       setConnectionPhase('connected', tag);
       message('连接已验证，已恢复本地选项；需要更新时点击刷新。', 'success');
     } catch (error) {
@@ -2296,7 +2326,7 @@
       #view-multica{height:100%;min-height:max-content;display:flex;flex-direction:column}#view-multica .quick-card{flex:1 0 auto;display:flex;flex-direction:column;margin-bottom:0}#view-multica .quick-body{flex:1 0 auto;display:flex;flex-direction:column}#view-multica .task-description{flex:1 0 260px;height:auto;min-height:260px}
       #panel[data-display="sidebar"]{position:fixed;top:0;right:0;bottom:0;left:auto;width:min(520px,calc(100vw - 320px));height:100dvh;border-radius:0;border-top:0;border-right:0;border-bottom:0;box-shadow:-12px 0 48px #1e293b26;transform:translateX(102%);transition:transform .26s ease}
       #panel[data-display="sidebar"][data-open="true"]{transform:translateX(0)}
-      .shortcut-control{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}.shortcut-control input{width:126px;font-size:12px;text-align:center}.shortcut-control button{padding:8px 9px;font-size:11px}
+      .settings-heading{flex-wrap:wrap}.settings-heading button{white-space:nowrap}.settings-heading small{display:block;margin-top:5px}.settings-heading [data-kind=success]{color:#15803d}.settings-heading [data-kind=error]{color:#b91c1c}.settings-heading [data-kind=warning]{color:#b45309}.settings-reset-dialog{width:min(440px,calc(100vw - 40px));border:1px solid #dce1ec;border-radius:16px;padding:22px;color:#334155;box-shadow:0 24px 80px #0f172a40}.settings-reset-dialog::backdrop{background:#0f172a66}.settings-reset-dialog h3{margin:0 0 14px}.settings-reset-dialog p{font-size:13px;line-height:1.8}.shortcut-control{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}.shortcut-control input{width:126px;font-size:12px;text-align:center}.shortcut-control button{padding:8px 9px;font-size:11px}
       .setting-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:1px solid #e5e8f0}.setting-row:last-child{border-bottom:0}.setting-copy{min-width:0}.setting-copy strong{display:block;font-size:13px;color:#273449}.setting-copy small{display:block;margin-top:4px}.setting-control{flex:none}.switch{position:relative;display:inline-flex;align-items:center;width:44px;height:26px;margin:0;cursor:pointer}.switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}.switch-track{width:44px;height:26px;border-radius:20px;background:#cbd5e1;transition:background .15s}.switch-track::after{content:"";display:block;width:20px;height:20px;margin:3px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #1e293b33;transition:transform .15s}.switch input:checked+.switch-track{background:#2563eb}.switch input:checked+.switch-track::after{transform:translateX(18px)}.switch input:focus-visible+.switch-track{outline:3px solid #93c5fd;outline-offset:2px}.segmented{display:flex;padding:3px;border:1px solid #dce1ec;border-radius:9px;background:#f1f3f6}.segmented button{padding:8px 12px;border:0;background:transparent;color:#64748b;font-size:12px;white-space:nowrap}.segmented button:hover{background:#e5eaf2}.segmented button[aria-pressed="true"]{background:#fff;color:#1e293b;box-shadow:0 1px 4px #1e293b1c}.settings-group>.hint{margin:0 0 4px}.settings-group .field>.hint{margin:4px 0 0}.profile-guide{display:grid;grid-template-columns:minmax(100px,1fr) minmax(0,3fr);gap:9px 12px;margin:12px 0 0;font-size:12px}.profile-guide dt{font-weight:700;color:#334155;overflow-wrap:anywhere}.profile-guide dd{margin:0;color:#64748b;overflow-wrap:anywhere}.profile-guide dt:not(:first-child),.profile-guide dd:not(:nth-child(2)){padding-top:8px;border-top:1px solid #edf0f5}
       .builtin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}.builtin-card{text-align:left;display:grid;gap:4px;padding:12px;background:#f8fbff;border:1px solid #dbeafe;color:#273449}.builtin-card:hover{background:#eff6ff}.builtin-card strong{font-size:13px}.builtin-card small{font-size:11px;color:#71839a}.builtin-card span{font-size:11px;color:#2563eb}@media(max-width:560px){.builtin-grid{grid-template-columns:1fr}}
       #task-extras>summary{display:none}.quick-foot #submit{margin-left:auto}.quick-source #task-source{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}.quick-options select:hover{border-color:#b7becb}.quick-body .task-description:focus,.quick-body .task-title:focus{box-shadow:none}
@@ -2346,10 +2376,10 @@
             <div class="card quick-card"><div class="quick-head"><strong>快速创建</strong><button id="new-blank-task" type="button" class="text-button">新建空白任务</button></div><div class="quick-body"><input id="task-title" class="task-title" aria-label="任务标题" placeholder="任务标题"><textarea id="task-description" class="task-description" rows="7" aria-label="任务描述" placeholder="添加描述..."></textarea><div class="quick-source"><strong>🔗 当前浏览页面</strong><span id="task-source">来源将随任务保存</span></div><p id="task-attachment-mode" class="hint" hidden></p><div id="selected-attachments" class="attachment-list" aria-live="polite"></div><div class="quick-assignee"><span class="quick-avatar">M</span><span>连接后可选择智能体接收任务</span></div><div class="quick-options"><select id="task-status" aria-label="任务状态"><option value="todo">◯ 待办</option><option value="backlog">待整理</option><option value="in_progress">进行中</option><option value="in_review">待审核</option><option value="done">已完成</option><option value="blocked">已阻塞</option></select><select id="task-priority" aria-label="优先级"><option value="none">－ 无优先级</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="urgent">紧急</option></select><select id="agent" aria-label="处理智能体"><option value="">选择智能体</option></select><select id="task-project" aria-label="项目"><option value="">无项目</option></select><button id="task-more" class="secondary more-button" type="button" aria-label="更多选项">•••</button></div><details id="task-extras" class="quick-dates"><summary>更多选项</summary><div class="task-grid"><div class="field"><label for="task-label">标签</label><select id="task-label"><option value="">无标签</option></select></div><div class="field"><label for="task-start">开始日期</label><input id="task-start" type="date"></div><div class="field"><label for="task-due">截止日期</label><input id="task-due" type="date"></div></div></details></div><div class="quick-foot"><button id="task-attachments" class="text-button" type="button" title="添加本地附件" aria-label="添加本地附件">📎</button><input id="attachment-picker" type="file" multiple hidden><label><input id="agent-task" type="checkbox" checked>智能体任务</label><label><input id="continue-create" type="checkbox">继续创建</label><button id="submit" data-action class="submit">创建任务 ↵</button></div></div>
           </section>
           <section id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
-            <div class="section-intro"><div><div class="eyebrow">PREFERENCES</div><h3>设置</h3></div></div>
-            <div class="card"><div class="settings-group"><h4>基础配置</h4><div class="field"><label for="api">API 服务根地址</label><select id="api"></select><p class="hint">选择官方服务，或添加你自己的 Multica 服务。</p><div id="custom-server-panel" class="custom-server-panel" hidden><label for="custom-api">添加自建服务器</label><div class="inline-control"><input id="custom-api" type="url" placeholder="https://your-multica.example"><button id="add-api" class="secondary">添加</button></div></div></div><div class="field"><label for="token">访问令牌（API Token）</label><input id="token" type="password" autocomplete="off"><p class="hint">用于连接 Multica，仅保存在当前站点的本地存储。</p></div><div class="row"><button id="connect" data-action>手动连接 / 刷新</button></div></div>
+            <div class="section-intro settings-heading"><div><div class="eyebrow">PREFERENCES</div><h3>设置</h3><small id="settings-save-state" role="status" aria-live="polite">更改会自动保存</small></div><button id="reset-preferences" class="secondary" type="button" data-action>恢复偏好默认值</button></div>
+            <div class="card"><div class="settings-group"><h4>基础配置</h4><div class="field"><label for="api">API 服务根地址</label><select id="api"></select><p class="hint">选择官方服务，或添加你自己的 Multica 服务。</p><div id="custom-server-panel" class="custom-server-panel" hidden><label for="custom-api">添加自建服务器</label><div class="inline-control"><input id="custom-api" type="url" placeholder="https://your-multica.example"><button id="add-api" class="secondary">添加</button></div></div></div><div class="field"><label for="token">访问令牌（API Token）</label><input id="token" type="password" autocomplete="off"><p class="hint">用于连接 Multica，自动保存到脚本存储；修改后点击手动连接验证。</p></div><div class="row"><button id="connect" data-action>手动连接 / 刷新</button></div></div>
               <div class="settings-group"><h4>任务默认配置</h4><div class="field"><label for="workspace">默认工作区</label><select id="workspace"><option value="">请先连接</option></select><p class="hint">新任务使用这个工作区，可随时切换。</p></div><div class="field"><label for="default-project">默认项目</label><select id="default-project"><option value="">请先连接</option></select><p class="hint">预先填入任务创建页，提交前仍可修改。</p></div><div class="field"><label for="default-agent">默认处理智能体</label><select id="default-agent"><option value="">请先连接</option></select><p class="hint">新任务默认指派给这位智能体。</p></div><div class="field"><label for="default-label">默认标签</label><select id="default-label"><option value="">不指定标签</option></select><p class="hint">新任务默认使用的标签，可留空。</p></div></div>
-              <div class="settings-group"><h4>UI 设置</h4><div class="setting-row"><div class="setting-copy"><strong>入口显示范围</strong><small>隐藏入口时，仍可用快捷键或油猴菜单打开工作台。</small></div><div class="setting-control"><select id="entry-visibility" aria-label="入口显示范围"><option value="configured">仅匹配配置的页面（默认）</option><option value="all">所有 HTTPS 网页</option><option value="shortcut">仅快捷键或菜单打开</option></select></div></div><div class="setting-row"><div class="setting-copy"><strong>打开／关闭任务面板快捷键</strong><small id="shortcut-description">在当前网页按快捷键打开或关闭面板</small></div><div class="setting-control shortcut-control"><input id="shortcut" type="text" readonly aria-label="当前任务面板快捷键"><button id="edit-shortcut" class="secondary" type="button">修改</button><button id="reset-shortcut" class="secondary" type="button">恢复默认</button></div></div><div class="setting-row"><div class="setting-copy"><strong>主面板显示样式</strong><small>选择工作台以侧边栏或浮窗方式显示</small></div><div class="setting-control segmented" role="group" aria-label="主面板显示样式"><button id="mode-sidebar" type="button" aria-pressed="false">侧边栏</button><button id="mode-floating" type="button" aria-pressed="true">浮窗</button></div></div><div class="setting-row"><div class="setting-copy"><strong>隐藏 BugDone 原有 AI 按钮</strong><small>隐藏页面内置的 AI 入口（openIntelligentTracking）</small></div><label class="switch setting-control" aria-label="隐藏 BugDone 原有 AI 按钮"><input type="checkbox" id="hide-native-ai"><span class="switch-track" aria-hidden="true"></span></label></div></div><div class="row"><button id="save" data-action>保存设置</button></div><p class="hint">自建服务器还需允许油猴或 Mac App 网络桥访问。</p></div>
+              <div class="settings-group"><h4>UI 设置</h4><div class="setting-row"><div class="setting-copy"><strong>入口显示范围</strong><small>隐藏入口时，仍可用快捷键或油猴菜单打开工作台。</small></div><div class="setting-control"><select id="entry-visibility" aria-label="入口显示范围"><option value="configured">仅匹配配置的页面（默认）</option><option value="all">所有 HTTPS 网页</option><option value="shortcut">仅快捷键或菜单打开</option></select></div></div><div class="setting-row"><div class="setting-copy"><strong>打开／关闭任务面板快捷键</strong><small id="shortcut-description">在当前网页按快捷键打开或关闭面板</small></div><div class="setting-control shortcut-control"><input id="shortcut" type="text" readonly aria-label="当前任务面板快捷键"><button id="edit-shortcut" class="secondary" type="button">修改</button><button id="reset-shortcut" class="secondary" type="button">恢复默认</button></div></div><div class="setting-row"><div class="setting-copy"><strong>主面板显示样式</strong><small>选择工作台以侧边栏或浮窗方式显示</small></div><div class="setting-control segmented" role="group" aria-label="主面板显示样式"><button id="mode-sidebar" type="button" aria-pressed="false">侧边栏</button><button id="mode-floating" type="button" aria-pressed="true">浮窗</button></div></div><div class="setting-row"><div class="setting-copy"><strong>隐藏 BugDone 原有 AI 按钮</strong><small>隐藏页面内置的 AI 入口（openIntelligentTracking）</small></div><label class="switch setting-control" aria-label="隐藏 BugDone 原有 AI 按钮"><input type="checkbox" id="hide-native-ai"><span class="switch-track" aria-hidden="true"></span></label></div></div><p class="hint">自建服务器还需允许油猴或 Mac App 网络桥访问。</p></div>
             <p class="version">Issues → Multica · v${SCRIPT_VERSION}</p>
           </section>
           <section id="view-profiles" role="tabpanel" aria-labelledby="tab-profiles" hidden>
@@ -2378,6 +2408,7 @@
         </div>
         <div id="bug-action-bar" class="bug-action-bar"><button id="next" data-action>下一步：AI任务创建 →</button></div>
         <footer><p id="message" role="status" aria-live="polite">尚未提交 · 请先核对 Bug 详情。</p></footer>
+        <dialog id="reset-preferences-dialog" class="settings-reset-dialog" aria-labelledby="reset-preferences-title"><h3 id="reset-preferences-title">恢复偏好默认值？</h3><p>任务默认配置、界面样式、入口位置和快捷键将恢复默认。</p><p>保留服务器、访问令牌、自建服务器列表、处理列表、站点捕获配置、附件及当前任务草稿。未缓存的默认选项将在下次连接时选择首项。</p><div class="row end"><button id="cancel-reset-preferences" class="secondary" type="button">取消</button><button id="confirm-reset-preferences" type="button" data-action>恢复默认</button></div></dialog>
         <div id="attachment-preview" class="attachment-preview" hidden role="dialog" aria-modal="true" aria-labelledby="attachment-preview-title"><div class="attachment-preview-card"><div class="attachment-preview-head"><strong id="attachment-preview-title">附件预览</strong><button id="attachment-preview-close" class="icon-button" type="button" aria-label="关闭附件预览">×</button></div><div class="attachment-preview-body"><img id="attachment-preview-image" alt="附件图片" hidden><pre id="attachment-preview-text" hidden></pre></div><a id="attachment-preview-link" class="attachment-preview-link" target="_blank" rel="noopener noreferrer" hidden>打开原始附件 ↗</a></div></div>
       </section>
       <div id="success" class="success" popover="manual" hidden role="status" aria-live="polite"><span class="success-mark">✓</span><div><strong>创建成功</strong><span class="success-copy"></span></div></div>`;
@@ -2496,9 +2527,8 @@
     $('hide-native-ai').checked = config.hideNativeAI !== false;
     $('entry-visibility').value=config.entryVisibility;
     $('entry-visibility').addEventListener('change',()=>{
-      config.entryVisibility=$('entry-visibility').value;syncEntryVisibility();writeValue('config',{...config});
+      config.entryVisibility=$('entry-visibility').value;syncEntryVisibility();persistConfig({...config});
       message('入口显示范围已保存；快捷键仍可打开工作台。','success');
-      if (!$('launch').hidden && config.token && config.api) void run(connectIfNeeded);
     });
     applyPanelMode(config.displayMode);
     function showShortcut() {
@@ -2684,7 +2714,7 @@
     let capturingShortcut = false;
     $('edit-shortcut').onclick = () => { capturingShortcut = true; $('shortcut').value = '请按快捷键…'; $('shortcut').focus(); };
     $('shortcut').onblur = () => { if (capturingShortcut) { capturingShortcut = false; showShortcut(); } };
-    $('reset-shortcut').onclick = () => { capturingShortcut = false; config.shortcut = DEFAULT_SHORTCUT; config.shortcutCustomized = false; showShortcut(); writeValue('config', { ...config }); message('快捷键已恢复默认。', 'success'); };
+    $('reset-shortcut').onclick = () => { capturingShortcut = false; config.shortcut = DEFAULT_SHORTCUT; config.shortcutCustomized = false; showShortcut(); persistConfig({ ...config }); message('快捷键已恢复默认。', 'success'); };
     window.addEventListener('keydown', event => {
       if (event.repeat || event.isComposing) return;
       if (capturingShortcut) {
@@ -2697,7 +2727,7 @@
         config.shortcutCustomized = true;
         capturingShortcut = false;
         showShortcut();
-        writeValue('config', { ...config });
+        persistConfig({ ...config });
         message(`快捷键已保存：${$('shortcut').value}`, 'success');
         return;
       }
@@ -2757,16 +2787,17 @@
         openWebsite();
       }
     };
-    $('refresh-connection').onclick = () => run(connect);
-    $('connect').onclick = () => run(connect);
+    const manuallyConnect=()=>run(async()=>{clearTimeout(tokenSaveTimer);persistConnectionSettings();await connect();});
+    $('refresh-connection').onclick = manuallyConnect;
+    $('connect').onclick = manuallyConnect;
     $('add-api').onclick = () => run(async () => {
       const c = validateConnection({ api: $('custom-api').value.trim(), token: 'address-only' });
       const saved = configuredServers().filter(api => api !== 'https://api.multica.ai');
       if (!saved.includes(c.api)) saved.push(c.api);
-      writeValue('servers', saved); config.api = c.api; renderServers(); $('custom-api').value = '';
+      writeValue('servers', saved); renderServers(); $('api').value=c.api; $('custom-api').value = '';
       $('custom-server-panel').hidden = true;
-      await connectIfNeeded();
-      message('自建服务已添加。', 'success');
+      $('api').dispatchEvent(new Event('change'));
+      message('自建服务已添加并保存，请手动连接。', 'success');
     });
     switchTab('bug');
     $('bug').onchange = () => {
@@ -2786,7 +2817,7 @@
       config.defaultAgentCustomized = true;
       if (!$('agent').value || $('agent').value === previous) $('agent').value = config.defaultAgent;
       config.agent = $('agent').value;
-      try { writeValue('config', { ...config }); message('默认处理智能体已保存。', 'success'); }
+      try { persistConfig({ ...config }); message('默认处理智能体已保存。', 'success'); }
       catch (e) { message('默认处理智能体保存失败。', 'error'); }
     });
     $('api').addEventListener('change', () => {
@@ -2797,14 +2828,23 @@
       fillSelect('workspace', readValue(`workspaces:${api}`, []), '', '请先连接', true);
       for (const id of ['default-project', 'task-project', 'default-label', 'task-label']) fillSelect(id, [], '', '请先连接');
       renderAgentChoices({ agent: '', defaultAgent: '' }, []);
-      void run(connectIfNeeded);
+      try {persistConnectionSettings();} catch(error) {message(error.message,'error');}
     });
-    $('token').addEventListener('input', () => setConnectionPhase('idle'));
-    $('token').addEventListener('change', () => { if ($('token').value.trim()) void run(connectIfNeeded); });
+    let tokenSaveTimer;
+    const saveToken=()=>{clearTimeout(tokenSaveTimer);tokenSaveTimer=null;try{persistConnectionSettings();}catch(error){message(error.message,'error');}};
+    $('token').addEventListener('input', () => {
+      setConnectionPhase('idle');$('settings-save-state').textContent='正在保存…';
+      clearTimeout(tokenSaveTimer);tokenSaveTimer=setTimeout(saveToken,300);
+    });
+    $('token').addEventListener('change', saveToken);
+    window.addEventListener('pagehide',()=>{if(tokenSaveTimer) saveToken();});
     $('workspace').addEventListener('change', () => run(async () => {
       const workspace = $('workspace').value;
-      if (!workspace) return;
-      config = { ...config, api: $('api').value, token: $('token').value, workspace, project: '', defaultAgent: '', agent: '', label: '', projectCustomized:false, defaultAgentCustomized:false };
+      config = { ...config, api: $('api').value, token: $('token').value, workspace, workspaceAlias:workspace ? $('workspace').selectedOptions[0]?.textContent || '' : '', project: '', projectAlias:'', defaultAgent: '', agent: '', label: '', projectCustomized:false, defaultAgentCustomized:false };
+      persistConfig(config);
+      for (const id of ['default-project','task-project','default-label','task-label']) fillSelect(id,[],'','请先选择工作区');
+      renderAgentChoices({agent:'',defaultAgent:''},[]);
+      if (!workspace) {message('默认工作区已清空并保存。','success');return;}
       const catalog = readValue(`catalog:${config.api}:${workspace}`, null);
       const workspaces = readValue(`workspaces:${config.api}`, null);
       if (needsCatalogRefresh(config, readValue(`connection-tag:${config.api}`, ''), workspaces, catalog))
@@ -2812,38 +2852,51 @@
       else applyCatalog(config, catalog);
       config = { ...config, project: $('default-project').value, defaultAgent: $('default-agent').value,
         agent: $('agent').value, label: $('default-label').value };
-      writeValue('config', config);
+      persistConfig(config);
       message('已切换工作区，相关选项已更新。', 'success');
     }));
     for (const id of ['default-project', 'default-label']) $(id).addEventListener('change', () => {
       const taskId = id === 'default-project' ? 'task-project' : 'task-label';
       if(id === 'default-project') {
         config.project=$(id).value;config.projectCustomized=true;$(taskId).value=$(id).value;
-        try{writeValue('config',{...config});message('默认项目已保存。','success');}catch{message('默认项目保存失败。','error');}
+        try{persistConfig({...config});message('默认项目已保存。','success');}catch{message('默认项目保存失败。','error');}
       }
       else if($('task-label').dataset.userEdited !== 'true') applyTaskDefaultLabel(taskDraft ? taskDraft.profile : activeProfile);
       if (id === 'default-label') {
         config.label = $(id).value;
-        try { writeValue('config', { ...config }); message('默认标签已保存。', 'success'); }
+        try { persistConfig({ ...config }); message('默认标签已保存。', 'success'); }
         catch (error) { message('默认标签保存失败。', 'error'); }
       }
     });
-    $('hide-native-ai').addEventListener('change', () => { config.hideNativeAI = $('hide-native-ai').checked; setNativeAIVisibility(config.hideNativeAI); try { writeValue('config', { ...config }); message(config.hideNativeAI ? '已隐藏 BugDone 原有 AI 按钮。' : '已显示 BugDone 原有 AI 按钮。', 'success'); } catch (e) { message('AI 按钮显示设置保存失败。', 'error'); } });
+    $('hide-native-ai').addEventListener('change', () => { config.hideNativeAI = $('hide-native-ai').checked; setNativeAIVisibility(config.hideNativeAI); try { persistConfig({ ...config }); message(config.hideNativeAI ? '已隐藏 BugDone 原有 AI 按钮。' : '已显示 BugDone 原有 AI 按钮。', 'success'); } catch (e) { message('AI 按钮显示设置保存失败。', 'error'); } });
     for (const [id, mode] of [['mode-sidebar', 'sidebar'], ['mode-floating', 'floating']]) $(id).onclick = () => {
       applyPanelMode(mode);
-      try { writeValue('config', { ...config }); message(`已切换为${mode === 'sidebar' ? '侧边栏' : '浮窗'}模式。`, 'success'); }
+      try { persistConfig({ ...config }); message(`已切换为${mode === 'sidebar' ? '侧边栏' : '浮窗'}模式。`, 'success'); }
       catch (e) { message('主面板显示样式保存失败。', 'error'); }
     };
-    $('save').onclick = () => run(async () => {
-      config = settings(false);
-      writeValue('config', config);
-      if (!config.api || !config.token) {
-        setConnectionPhase('idle'); message(`设置已保存（${storageMode}）；填写 API 和令牌后即可连接。`, 'success'); return;
-      }
-      await connectIfNeeded();
-      config = settings(false); writeValue('config', config);
-      message(`设置已保存（${storageMode}）。`, 'success');
-    });
+    $('reset-preferences').onclick=()=>$('reset-preferences-dialog').showModal();
+    $('cancel-reset-preferences').onclick=()=>$('reset-preferences-dialog').close();
+    $('confirm-reset-preferences').onclick=()=>{
+      $('reset-preferences-dialog').close();
+      void run(()=>{
+        clearTimeout(tokenSaveTimer);persistConnectionSettings();
+        const verified=readValue(`connection-tag:${config.api}`,'')===connectionCacheTag(config.api,config.token);
+        const workspaces=verified ? readValue(`workspaces:${config.api}`,[]) || [] : [];
+        const first=workspaces.find(item=>item?.id && item.is_archived!==true);
+        const cached=first ? readValue(`catalog:${config.api}:${first.id}`,{}) || {} : {};
+        const catalog={projects:cached.projects || [],agents:cached.agents || [],labels:cached.labels || []};
+        const next=restorePreferenceDefaults(config,workspaces,catalog);
+        persistConfig(next);config=next;
+        fillSelect('workspace',workspaces,config.workspace,'请先连接');
+        applyCatalog(config,catalog);$('hide-native-ai').checked=config.hideNativeAI;
+        $('entry-visibility').value=config.entryVisibility;capturingShortcut=false;showShortcut();
+        applyPanelMode(config.displayMode);setNativeAIVisibility(config.hideNativeAI);syncEntryVisibility();
+        launchPosition=null;writeValue('launchPosition',null);
+        for(const property of ['left','top','right','bottom']) launch.style.removeProperty(property);constrainLaunch('reset-preferences');
+        if(!config.workspace) setConnectionPhase('idle');
+        message('偏好已恢复默认；连接配置和用户数据已保留。','success');
+      });
+    };
     $('submit').onclick = () => run(submit);
     $('import').onclick = () => run(async () => {
       const text = $('json').value;
