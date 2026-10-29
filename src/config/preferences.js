@@ -22,7 +22,7 @@ export function restorePreferenceDefaults(saved, workspaces = [], catalog = {}) 
     const workspace=first(workspaces),project=workspace && first(catalog.projects),agent=workspace && first(catalog.agents);
     return {...capturePreferences({captureEnabled:saved.captureEnabled}),api:saved.api,token:saved.token,umengCaptureEnabled:saved.umengCaptureEnabled ?? true,
       workspace:workspace?.id || '',workspaceAlias:workspace?.name || '',project:project?.id || '',projectAlias:project?.name || '',
-      defaultAgent:agent?.id || '',agent:agent?.id || '',label:'',hideNativeAI:true,displayMode:'floating',entryVisibility:'configured',
+      defaultAgent:agent?.id || '',agent:agent?.id || '',label:'',hideNativeAI:true,showDrawerHandle:true,displayMode:'floating',entryVisibility:'configured',
       shortcut:DEFAULT_SHORTCUT,shortcutCustomized:false,projectCustomized:false,defaultAgentCustomized:false};
   }
 

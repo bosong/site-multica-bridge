@@ -25,7 +25,7 @@ test('实际入口事件在恢复坐标和窗口缩小时校正位置，状态�
  let observerCallback;class ResizeObserver{constructor(fn){observerCallback=fn;}observe(){}}
  const launch=new EventTarget();Object.assign(launch,{style:{},offsetWidth:134,offsetHeight:87,getAttribute:()=> 'false',getBoundingClientRect(){const left=parseFloat(this.style.left)||0,top=parseFloat(this.style.top)||0;return{left,top,right:left+this.offsetWidth,bottom:top+this.offsetHeight,width:this.offsetWidth,height:this.offsetHeight};}});
  const panel=new EventTarget(),close=new EventTarget(),writes=[];
- const $=id=>({launch,panel,close})[id];
+ const $=id=>({launch,panel,close,'drawer-handle':{}})[id];
  new Function('$','window','fitLaunchPosition','writeValue','syncPageLayout','debug','ResizeObserver',`let launchPosition={left:1751,top:938};${source.slice(start,end)}`)($,window,core.fitLaunchPosition,(key,value)=>writes.push([key,value]),()=>{},()=>{},ResizeObserver);
  assert.equal(launch.style.left,'1058px');assert.equal(launch.style.top,'705px');
  window.innerWidth=800;window.innerHeight=600;Object.assign(window.visualViewport,{width:800,height:600});window.dispatchEvent(new Event('resize'));

@@ -1,3 +1,4 @@
+import {createDrawerHandle} from './ui/drawer-handle.js';
 import {createPageLayout, resolveDrawerPresentation} from './ui/page-layout.js';
 import { siteModeForUrl } from './capture/matching.js';
 import { UI_DELAY_MS, DEFAULT_SHORTCUT } from './config/constants.js';
@@ -69,6 +70,7 @@ const storage=createStorage({debug,GM_getValue:typeof GM_getValue==='function'?G
   config.hideNativeAI = true;
   config.umengCaptureEnabled = true;
   config.displayMode = 'floating';
+  config.showDrawerHandle = true;
   config.entryVisibility = 'configured';
   config.shortcut = DEFAULT_SHORTCUT;
   config.shortcutCustomized = false;
@@ -147,7 +149,17 @@ const storage=createStorage({debug,GM_getValue:typeof GM_getValue==='function'?G
   const $ = id => root.getElementById(id);
   let panelCloseTimer = 0;
   const pageLayout = createPageLayout({document, window, getPresentation:()=>resolveDrawerPresentation(activeProfile, BUILTIN_PROFILES)});
-  function syncPageLayout(open) { pageLayout.sync(open, config.displayMode); }
+  let drawerHandle = null;
+  function syncDrawerHandle(open) {
+    const button = root && $('drawer-handle');
+    if (!button) return;
+    drawerHandle ||= createDrawerHandle(button);
+    drawerHandle.sync({enabled:config.showDrawerHandle !== false, mode:config.displayMode, allowed:entryShouldShow(config.entryVisibility,activeProfile), page:location.href, open});
+  }
+  function syncPageLayout(open) {
+    pageLayout.sync(open, config.displayMode);
+    syncDrawerHandle(open);
+  }
   function openPanel() {
     const panel = $('panel');
     clearTimeout(panelCloseTimer);
@@ -244,6 +256,7 @@ const storage=createStorage({debug,GM_getValue:typeof GM_getValue==='function'?G
   function syncEntryVisibility() {
     if (!root) return;
     $('launch').hidden = !entryShouldShow(config.entryVisibility,activeProfile);
+    syncDrawerHandle($('launch').getAttribute('aria-expanded') === 'true');
   }
   function renderPageCapturePreview() {
     if(config.captureEnabled===false) return;
@@ -341,7 +354,7 @@ const storage=createStorage({debug,GM_getValue:typeof GM_getValue==='function'?G
   setInterval(()=>refreshCaptureRuntime(),800);
   function message(text, kind = 'info') { const el = $('message'); el.textContent = text; el.className = `status-${kind}`; }
   function settings(requireConnection = true) {
-    const values = { ...capturePreferences(config), api: $('api').value.trim(), workspace: $('workspace').value, workspaceAlias: $('workspace').selectedOptions[0]?.textContent || '', token: $('token').value, project: $('default-project').value, projectAlias: $('default-project').selectedOptions[0]?.textContent || '', agent: $('agent').value, defaultAgent: $('default-agent').value, label: $('default-label').value, hideNativeAI: $('hide-native-ai').checked, umengCaptureEnabled: config.umengCaptureEnabled, displayMode: config.displayMode, entryVisibility:config.entryVisibility, shortcut: config.shortcut, shortcutCustomized: config.shortcutCustomized, projectCustomized:config.projectCustomized, defaultAgentCustomized:config.defaultAgentCustomized };
+    const values = { ...capturePreferences(config), api: $('api').value.trim(), workspace: $('workspace').value, workspaceAlias: $('workspace').selectedOptions[0]?.textContent || '', token: $('token').value, project: $('default-project').value, projectAlias: $('default-project').selectedOptions[0]?.textContent || '', agent: $('agent').value, defaultAgent: $('default-agent').value, label: $('default-label').value, hideNativeAI: $('hide-native-ai').checked, umengCaptureEnabled: config.umengCaptureEnabled, displayMode: config.displayMode, showDrawerHandle:config.showDrawerHandle !== false, entryVisibility:config.entryVisibility, shortcut: config.shortcut, shortcutCustomized: config.shortcutCustomized, projectCustomized:config.projectCustomized, defaultAgentCustomized:config.defaultAgentCustomized };
     return requireConnection ? validateConfig(values) : validateStoredConfig(values);
   }
   function persistConfig(next = config) {

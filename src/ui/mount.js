@@ -1,3 +1,4 @@
+import {drawerBackgroundTheme} from './drawer-handle.js';
 import { BUGDONE_PROFILE, BUILTIN_PROFILES, PROFILE_TEMPLATE, PAGE_TEXT_TEMPLATE, PAGE_BLANK_TEMPLATE } from '../sites/builtins.js';
 import { entryShouldShow, testProfileSample } from '../capture/matching.js';
 import { parseResponse } from '../sites/bugdone.js';
@@ -170,6 +171,7 @@ export function createMount(ctx) {
       ctx.$(id).dataset.userEdited='true';ctx.$(id).dataset.context=`${ctx.$('api').value}:${ctx.$('workspace').value}`;
     });
     ctx.$('hide-native-ai').checked = ctx.config.hideNativeAI !== false;
+    ctx.$('show-drawer-handle').checked = ctx.config.showDrawerHandle !== false;
     ctx.$('entry-visibility').value=ctx.config.entryVisibility;
     ctx.$('entry-visibility').addEventListener('change',()=>{
       ctx.config.entryVisibility=ctx.$('entry-visibility').value;ctx.syncEntryVisibility();ctx.persistConfig({...ctx.config});
@@ -182,6 +184,16 @@ export function createMount(ctx) {
       ctx.$('shortcut-description').textContent = `在当前网页按 ${label} 打开或关闭面板`;
     }
     showShortcut();
+    const handle = ctx.$('drawer-handle');
+    const refreshHandleTheme = () => {
+      if (!handle.hidden) handle.dataset.theme = drawerBackgroundTheme(document, window, handle);
+    };
+    handle.addEventListener('pointerenter', refreshHandleTheme);
+    handle.addEventListener('transitionend', refreshHandleTheme);
+    const themeObserver = new MutationObserver(refreshHandleTheme);
+    for (const element of [document.documentElement, document.body]) themeObserver.observe(element, {attributes:true, attributeFilter:['class','style','data-theme','data-color-mode','data-dark-theme','data-light-theme']});
+    themeObserver.observe(handle, {attributes:true, attributeFilter:['hidden','data-open']});
+    window.addEventListener('pagehide', () => themeObserver.disconnect(), {once:true});
     const launch = ctx.$('launch');
     let drag = null, suppressLaunchClick = false;
     const launchViewport = () => ({
@@ -228,6 +240,10 @@ export function createMount(ctx) {
     launch.addEventListener('pointercancel', () => { drag = null; constrainLaunch('drag-cancel'); });
     launch.onclick = () => { if (suppressLaunchClick) return; if (launch.getAttribute('aria-expanded') === 'true') ctx.closePanel(); else { ctx.openPanel(); ctx.root.querySelector('[role=tab][aria-selected=true]').focus(); } };
     ctx.$('close').onclick = () => { ctx.closePanel(); ctx.$('launch').focus(); };
+    ctx.$('drawer-handle').onclick = () => {
+      if (launch.getAttribute('aria-expanded') === 'true') ctx.closePanel();
+      else ctx.openPanel();
+    };
     window.addEventListener('resize', () => { ctx.syncPageLayout(ctx.$('launch').getAttribute('aria-expanded') === 'true'); constrainLaunch('window-resize'); });
     window.visualViewport?.addEventListener('resize', () => constrainLaunch('viewport-resize'));
     window.visualViewport?.addEventListener('scroll', () => constrainLaunch('viewport-scroll'));
@@ -519,6 +535,19 @@ export function createMount(ctx) {
       }
     });
     ctx.$('hide-native-ai').addEventListener('change', () => { ctx.config.hideNativeAI = ctx.$('hide-native-ai').checked; ctx.setNativeAIVisibility(ctx.config.hideNativeAI); try { ctx.persistConfig({ ...ctx.config }); ctx.message(ctx.config.hideNativeAI ? '已隐藏 BugDone 原有 AI 按钮。' : '已显示 BugDone 原有 AI 按钮。', 'success'); } catch (e) { ctx.message('AI 按钮显示设置保存失败。', 'error'); } });
+    ctx.$('show-drawer-handle').addEventListener('change', () => {
+      const previous = ctx.config.showDrawerHandle !== false;
+      ctx.config.showDrawerHandle = ctx.$('show-drawer-handle').checked;
+      try {
+        ctx.persistConfig({...ctx.config});
+        ctx.syncPageLayout(ctx.$('launch').getAttribute('aria-expanded') === 'true');
+        ctx.message(ctx.config.showDrawerHandle ? '已启用抽屉把手，仅侧边栏模式生效。' : '已隐藏抽屉把手。', 'success');
+      } catch (error) {
+        ctx.config.showDrawerHandle = previous;
+        ctx.$('show-drawer-handle').checked = previous;
+        ctx.message('抽屉把手设置保存失败，请重试。', 'error');
+      }
+    });
     for (const [id, mode] of [['mode-sidebar', 'sidebar'], ['mode-floating', 'floating']]) ctx.$(id).onclick = () => {
       ctx.applyPanelMode(mode);
       try { ctx.persistConfig({ ...ctx.config }); ctx.message(`已切换为${mode === 'sidebar' ? '侧边栏' : '浮窗'}模式。`, 'success'); }
@@ -538,7 +567,7 @@ export function createMount(ctx) {
         const next=restorePreferenceDefaults(ctx.config,workspaces,catalog);
         ctx.persistConfig(next);ctx.config=next;
         ctx.fillSelect('workspace',workspaces,ctx.config.workspace,'请先连接');
-        ctx.applyCatalog(ctx.config,catalog);ctx.$('hide-native-ai').checked=ctx.config.hideNativeAI;
+        ctx.applyCatalog(ctx.config,catalog);ctx.$('hide-native-ai').checked=ctx.config.hideNativeAI;ctx.$('show-drawer-handle').checked=ctx.config.showDrawerHandle !== false;
         ctx.$('entry-visibility').value=ctx.config.entryVisibility;capturingShortcut=false;showShortcut();
         ctx.applyPanelMode(ctx.config.displayMode);ctx.setNativeAIVisibility(ctx.config.hideNativeAI);ctx.syncEntryVisibility();renderCaptureSettings();ctx.refreshCaptureRuntime(true);
         ctx.launchPosition=null;ctx.writeValue('launchPosition',null);
