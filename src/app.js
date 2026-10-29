@@ -1,3 +1,4 @@
+import {createPageLayout, resolveDrawerPresentation} from './ui/page-layout.js';
 import { siteModeForUrl } from './capture/matching.js';
 import { UI_DELAY_MS, DEFAULT_SHORTCUT } from './config/constants.js';
 import { BUGDONE_PROFILE, UMENG_PROFILE, BUILTIN_PROFILES, PROFILE_TEMPLATE, PAGE_TEXT_TEMPLATE, PAGE_BLANK_TEMPLATE } from './sites/builtins.js';
@@ -132,9 +133,10 @@ const storage=createStorage({debug,GM_getValue:typeof GM_getValue==='function'?G
     });
   }
   function updateSiteLayoutStyle() {
-    const style=document.getElementById('bugdone-multica-page-shift'); if(!style) return;
-    style.textContent=(activeProfile?.presentation?.drawerSelectors || []).map(selector=>`html[data-bugdone-multica-drawer-open="true"] ${selector}{right:var(--bugdone-multica-drawer-width)!important;max-width:calc(100vw - var(--bugdone-multica-drawer-width))!important}`).join('\n');
+    pageLayout.updateStyle();
+    if(root) syncPageLayout($('launch').getAttribute('aria-expanded') === 'true');
   }
+
   function watchNativeAI() {
     setNativeAIVisibility(config.hideNativeAI !== false);
     if (!document.body) return;
@@ -143,29 +145,9 @@ const storage=createStorage({debug,GM_getValue:typeof GM_getValue==='function'?G
     window.addEventListener('pagehide',()=>observer.disconnect(),{once:true});
   }
   const $ = id => root.getElementById(id);
-  let pageLayoutSnapshot = null, layoutRestoreTimer = 0, panelCloseTimer = 0;
-  function syncPageLayout(open) {
-    const html = document.documentElement;
-    const shift = open && config.displayMode === 'sidebar' && window.innerWidth > 760
-      ? Math.min(520, window.innerWidth - 320) : 0;
-    clearTimeout(layoutRestoreTimer);
-    if (shift) {
-      html.dataset.bugdoneMulticaDrawerOpen = 'true';
-      html.style.setProperty('--bugdone-multica-drawer-width', `${shift}px`);
-      if (!pageLayoutSnapshot) pageLayoutSnapshot = { width: html.style.width, transition: html.style.transition };
-      html.style.transition = pageLayoutSnapshot.transition ? `${pageLayoutSnapshot.transition}, width .26s ease` : 'width .26s ease';
-      html.style.width = `calc(100% - ${shift}px)`;
-    } else if (pageLayoutSnapshot) {
-      delete html.dataset.bugdoneMulticaDrawerOpen;
-      html.style.removeProperty('--bugdone-multica-drawer-width');
-      html.style.width = pageLayoutSnapshot.width;
-      layoutRestoreTimer = setTimeout(() => {
-        if (!pageLayoutSnapshot) return;
-        html.style.transition = pageLayoutSnapshot.transition;
-        pageLayoutSnapshot = null;
-      }, 270);
-    }
-  }
+  let panelCloseTimer = 0;
+  const pageLayout = createPageLayout({document, window, getPresentation:()=>resolveDrawerPresentation(activeProfile, BUILTIN_PROFILES)});
+  function syncPageLayout(open) { pageLayout.sync(open, config.displayMode); }
   function openPanel() {
     const panel = $('panel');
     clearTimeout(panelCloseTimer);
@@ -187,7 +169,7 @@ const storage=createStorage({debug,GM_getValue:typeof GM_getValue==='function'?G
     syncPageLayout(false);
     if (config.displayMode === 'sidebar' && !panel.hidden) {
       panel.dataset.open = 'false';
-      panelCloseTimer = setTimeout(() => { if (panel.dataset.open !== 'true') panel.hidden = true; }, 270);
+      panelCloseTimer = setTimeout(() => { if (panel.dataset.open !== 'true') panel.hidden = true; }, pageLayout.duration() + 20);
     } else panel.hidden = true;
   }
   function applyPanelMode(mode) {

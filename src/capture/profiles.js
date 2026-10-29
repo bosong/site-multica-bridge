@@ -152,9 +152,9 @@ export function validateProfileExtensions(profile, fields) {
       template(profile.links.shareTemplate, ['siteId','scopeId','recordId','number']); }
     if ((!profile.captureMode || profile.captureMode === 'api') && profile.draft.descriptionTemplate !== undefined) template(profile.draft.descriptionTemplate, ['siteId','scopeId','recordId','number','title','description','sourceUrl','shareUrl','attachmentLinks', ...Object.keys(profile.record.fields || {})]);
     if (profile.presentation) {
-      fields(profile.presentation, ['recordLabel','hideSelectors','drawerSelectors'], 'presentation');
+      fields(profile.presentation, ['recordLabel','hideSelectors','drawerSelectors','drawerPaddingSelectors'], 'presentation');
       if (profile.presentation.recordLabel && (typeof profile.presentation.recordLabel !== 'string' || profile.presentation.recordLabel.length > 80)) throw Error('记录名称无效');
-      for (const key of ['hideSelectors','drawerSelectors']) if (profile.presentation[key] && (!Array.isArray(profile.presentation[key]) || profile.presentation[key].length > 8 || profile.presentation[key].some(x => typeof x !== 'string' || !/^[#.][A-Za-z][A-Za-z0-9_-]{0,80}$/.test(x)))) throw Error('布局选择器只接受简单 ID 或 class');
+      for (const key of ['hideSelectors','drawerSelectors','drawerPaddingSelectors']) if (profile.presentation[key] && (!Array.isArray(profile.presentation[key]) || profile.presentation[key].length > 8 || profile.presentation[key].some(x => typeof x !== 'string' || !/^[#.][A-Za-z][A-Za-z0-9_-]{0,80}$/.test(x)))) throw Error('布局选择器只接受简单 ID 或 class');
     }
     if (profile.processors) {
       fields(profile.processors, ['stack'], 'processors');

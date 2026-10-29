@@ -31,7 +31,7 @@ export const BUGDONE_PROFILE = {
 export const UMENG_PROFILE = {
     schemaVersion: 2, id: 'umeng-apm-crash', version: 2, enabled: false,
     metadata: { name: '友盟 APM' }, adapter: 'umeng', defaultLabel: { mode: 'inherit' },
-    presentation: { recordLabel: '选择崩溃记录' }, processors: { stack: { maxStacks: 2, maxLines: 40, maxChars: 4000 } },
+    presentation: { recordLabel: '选择崩溃记录', drawerPaddingSelectors: ['#root'] }, processors: { stack: { maxStacks: 2, maxLines: 40, maxChars: 4000 } },
     allowedOrigins: ['https://apm.umeng.com'],
     pages: [{ kind: 'list', path: '/platform/:appId/error_analysis/crash' },
       { kind: 'detail', path: '/platform/:appId/error_analysis/crash/detail/:errorId' }],
