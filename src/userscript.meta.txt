@@ -1,0 +1,24 @@
+// ==UserScript==
+// @name         Site 接入 Multica
+// @namespace    local.site.multica
+// @version      __VERSION__
+// @description  多站点信息捕获与 Multica 智能体任务桥接
+// @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/site-multica.user.js
+// @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/site-multica.user.js
+// @match        https://*/*
+// @run-at       document-start
+// @fastlane-network
+// @fastlane-storage
+// @noframes
+// @grant        unsafeWindow
+// @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_registerMenuCommand
+// @grant        GM_setValue
+// @connect      api.multica.ai
+// @connect      img.bugdone.cn
+// @connect      localhost
+// @connect      127.0.0.1
+// @connect      *
+// ==/UserScript==
+

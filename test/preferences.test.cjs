@@ -1,6 +1,6 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
-const source=fs.readFileSync(require.resolve('../bugdone-multica.user.js'),'utf8');
-const core=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return {validateStoredConfig,restorePreferenceDefaults:typeof restorePreferenceDefaults===\'function\'?restorePreferenceDefaults:null};})();')();
+const source=require('./helpers/source.cjs').source;
+const core=require('../.generated/test-core.cjs');
 test('恢复偏好保留连接与捕获启用状态，任务和UI恢复首次默认值',()=>{
  assert.equal(typeof core.restorePreferenceDefaults,'function');
  const saved={api:'https://self.example.test',token:'synthetic-token',workspace:'old',project:'old',defaultAgent:'old',agent:'old',label:'old',hideNativeAI:false,displayMode:'sidebar',entryVisibility:'all',shortcut:'Alt+M',shortcutCustomized:true,umengCaptureEnabled:false,projectCustomized:true,defaultAgentCustomized:true};

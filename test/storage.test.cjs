@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const source = fs.readFileSync(require.resolve('../bugdone-multica.user.js'), 'utf8');
+const source = require('./helpers/source.cjs').source;
 const start = source.indexOf('  const hasGMStorage =');
 const end = source.indexOf('  let customProfiles = ', start);
 assert.ok(start >= 0 && end > start);

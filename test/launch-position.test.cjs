@@ -1,8 +1,8 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
-const source=fs.readFileSync(require.resolve('../bugdone-multica.user.js'),'utf8');
-const core=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return {fitLaunchPosition:typeof fitLaunchPosition===\'function\'?fitLaunchPosition:null};})();')();
+const source=require('./helpers/source.cjs').source;
+const core=require('../.generated/test-core.cjs');
 
 test('旧大屏坐标按当前按钮尺寸收回小窗口内，完整保留入口可点击区域',()=>{
  assert.equal(typeof core.fitLaunchPosition,'function');

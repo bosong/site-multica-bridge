@@ -1,10 +1,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const source=fs.readFileSync(require.resolve('../bugdone-multica.user.js'),'utf8');
+const source=require('./helpers/source.cjs').source;
 const names=['capturePreferences','manualDraftContext','buildManualDraft','buildTypedManualDraft','snapshotTaskDraft','validateStoredConfig','validateConfig','validateSiteProfile','buildCapturedDraft','buildIssueBody','PROFILE_TEMPLATE'];
-const core=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+
- `return {${names.map(n=>`${n}:typeof ${n}==='undefined'?undefined:${n}`).join(',')}};})();`)();
+const core=require('../.generated/test-core.cjs');
 
 test('没有问题记录，手填标题和正文能生成独立手动草稿并保留真实内容',()=>{
  assert.equal(typeof core.buildTypedManualDraft,'function');

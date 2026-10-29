@@ -1,12 +1,12 @@
 # Site → Multica Bridge
 
-将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v2.4.0** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
+将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v3.0.0** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
 
 ## 界面预览
 
-![五栏工作台与站点配置示意](./assets/site-profiles-preview.png)
+![3.0.0 五栏工作台与站点配置示意](./assets/site-profiles-preview.png)
 
-当前工作台包含「信息捕获」「AI任务创建」「处理列表」「设置」「站点配置」五栏。下方两张根据 2.0.0 用户脚本的 HTML/CSS 生成离线示例页，由 Ego Lite 渲染截图，分别展示通用任务创建、侧边栏抽屉与 UI 设置。任务、项目、智能体、附件和链接均为合成数据。
+当前工作台包含「信息捕获」「AI任务创建」「处理列表」「设置」「站点配置」五栏。三张预览根据 3.0.0 模块源码中的实际 HTML/CSS 生成离线示例页，由 Ego Lite 渲染截图，分别展示站点配置、通用任务创建、侧边栏抽屉与 UI 设置。任务、项目、智能体、附件和链接均为合成数据。
 
 ![任务创建界面示意](./assets/ui-preview.png)
 
@@ -14,13 +14,13 @@
 
 ## 安装与升级
 
-1. [安装最新版用户脚本](https://raw.githubusercontent.com/bosong/site-multica-bridge/main/bugdone-multica.user.js)。更新内容见 [CHANGELOG](./CHANGELOG.md)。
+1. [安装最新版用户脚本](https://raw.githubusercontent.com/bosong/site-multica-bridge/main/site-multica.user.js)。更新内容见 [CHANGELOG](./CHANGELOG.md)。
 2. 在油猴中启用脚本并刷新目标网页，点击 **Multica-AI** 入口。按钮显示未配置、待连接、连接中、已连接或连接失败。
 3. 在「设置 → 基础配置」选择官方 API 或添加自建服务器，填写 API Token，自动保存后点击“手动连接 / 刷新”验证并读取选项。再次打开匹配页面会按已保存配置自动连接，目录会缓存，手动刷新可重新读取。
 4. 设置默认工作区、项目、智能体和可选标签。项目、标签和日期可以留空；明确清空的默认选项不会在刷新后自动选回第一项。各选项自动保存；令牌停止输入或失焦后保存，清空令牌及默认选项也会保存。
 5. 在「信息捕获」核对来源、标题、内容与附件，点击底部固定的 **下一步：AI任务创建**。第二栏的最终标题、描述和任务选项就是提交值。
 
-v2.0.0 的脚本名称为「Site 接入 Multica」，`@namespace` 改为 `local.site.multica`，`@description` 为「多站点信息捕获与 Multica 智能体任务桥接」，更新与下载 URL 指向新仓库。安装文件名仍为 `bugdone-multica.user.js`，使旧路径在仓库改名后仍能找到发布物；内部存储键和 BugDone 查重标记保持兼容，不随项目改名重置。
+v2.0.0 的脚本名称为「Site 接入 Multica」，`@namespace` 改为 `local.site.multica`，`@description` 为「多站点信息捕获与 Multica 智能体任务桥接」，更新与下载 URL 指向新仓库。3.0.0 的安装文件名改为 `site-multica.user.js`，安装、更新及下载地址同步使用新文件名。已安装旧路径脚本的用户需重新安装本版本，以更新油猴中的更新地址；内部存储键和 BugDone 查重标记保持兼容，不随文件改名重置。
 
 升级时建议在原有脚本编辑器中全选覆盖并保存，再刷新网页；不要同时启用新旧两份脚本。脚本管理器若把新名称/namespace 视为独立安装，其私有存储可能无法自动沿用，需要重新填写连接配置或导入已导出的站点规则。Mac 原生存储改用新 namespace；当原生桥已提供旧 namespace 数据时会迁移，当前网站旧本地值也会迁入新空间。桥未提供旧空间且没有本地副本时，需要重新配置，脚本不会绕过宿主的存储隔离。
 
@@ -103,25 +103,52 @@ FastlaneTool 需提供与 `@fastlane-network`、`@fastlane-storage` 对应的原
 
 脚本可在 HTTPS 网页运行（`@match https://*/*`），悬浮入口按显示范围决定；只有启用且匹配页面的配置才观察指定接口。`@connect *` 用于用户选择的自建 Multica 服务和配置附件域，实际捕获与图片读取仍受配置校验。请勿在仓库、截图或 Issue 中提交 Token、Cookie、私有问题或日志。
 
-## 本地检查
+## 开发与构建（3.0）
 
-项目目录名为 `site-multica-bridge`。需要 Node.js，无第三方运行依赖，也无需构建：
+需要 **Node.js 22.14.0 或更新版本**。安装依赖使用锁文件，不需要 Python 或浏览器运行时加载模块。
 
-```sh
-npm run check
-npm test
+```bash
+npm ci
+npm run build       # 从 src/ 生成根目录的可安装单文件
+npm run dev         # 监听 src/ 和 package.json，修改后自动重建
+npm test            # 先构建，再运行全部单元、模块和构建测试
+npm run check       # 校验语法、元数据及产物是否与当前源码一致
+npm run test:watch  # 独立验证真实监听重建；请勿与其他构建/测试并行
 ```
 
-v2.0.0 发布检查：102 项自动化测试通过；Ego Lite 已验证 BugDone 列表、友盟列表及自动跳转、GitHub 列表/详情和隔离世界捕获。2026-10-27 用户确认全部验收完成。版本变化见 [CHANGELOG](./CHANGELOG.md)。
+用户仍然只安装根目录的 `site-multica.user.js`。开发时修改 `src/`，不要手工编辑生成文件。修改后运行构建，提交源码、锁文件与生成产物；`npm run check` 会拒绝陈旧产物。分支开发时，README 的正式安装链接仍指向 main，测试当前分支应安装其本地构建产物。
 
-2.1.0 升级检查：114 项自动化测试通过，Ego Lite 已验证入口范围、延迟挂载、快捷键与菜单、文本/空白模板和跨页面草稿保留。
+| 位置 | 职责 |
+|---|---|
+| `src/index.js`、`src/app.js` | 启动守卫、单一会话状态与生命周期协调 |
+| `src/config/` | 常量、快捷键、捕获偏好与版本入口 |
+| `src/sites/` | 内置站点配置和站点专用适配 |
+| `src/capture/` | 规则校验、匹配、字段归一化及草稿生成 |
+| `src/multica/` | 连接、请求、查重、创建与状态逻辑 |
+| `src/platform/` | 存储回退、路由/接口监听及页面世界注入 |
+| `src/attachments/` | 附件下载、压缩、上传服务 |
+| `src/history/` | 来源详情链接与站点筛选 |
+| `src/ui/` | 面板挂载、HTML、CSS、入口位置计算 |
+| `scripts/build.mjs` | Node.js + esbuild 构建、校验和开发监听 |
 
-2.1.1 升级检查：118 项自动化测试通过，Ego Lite 已使用合成数据验证三个内置站点与手动任务的详情入口、旧记录降级和点击目标。
+`package.json` 是版本号的唯一来源，构建自动生成头部与运行时版本。安装文件名及更新地址统一为 `site-multica.user.js`；namespace、存储键和查重身份沿用旧版本。正式产物没有运行时 import、CDN 依赖或 eval/new Function；页面世界注入代码独立打包，不依赖主 bundle 中的函数名。
 
-2.1.2 修复 BugDone 列表省略 ProjectId 时提交内容预览为空；仅从可信且匹配的项目页面补全身份。121 项测试通过，并在 Ego Lite 验证列表项切换与来源、摘要预览。
+开发监听使用 750ms 源文件轮询，避免 Mac 文件句柄限制。正式脚本采用原子替换写入；开发 map、测试 bundle 和构建分析文件位于忽略提交的 `.generated/`。需要查看源码映射时使用 `.generated/dev/site-multica.user.js` 及相邻 map，正式安装产物不包含本机路径。
 
-2.2.0 升级检查：127 项自动化测试通过。Ego Lite 离线运行完整脚本，验证自动保存、修改连接信息时不请求网络、取消/确认恢复、首项默认值及连接和用户数据保留。
+核心测试加载实际模块导出；服务测试直接加载 ES 模块。部分旧事件绑定测试暂时保留源码片段适配，读取的是当前模块，不保存旧版业务代码；实际构建产物另经 Ego Lite 合成数据集成验证。
 
-2.3.0 升级检查：135 项自动化测试通过；Ego Lite 使用模拟记录验证站点默认关联、跨站切换、全部站点、未配置网页及单条删除隔离。
+详细边界见 [3.0 架构说明](./doc/architecture-v3.md)，阶段与当前步骤见 [3.0 实施计划](./doc/plans/2026-10-28-v3-modular-source.md)。
 
-2.4.0 升级检查：141 项自动化测试通过；Ego Lite 用模拟数据验证捕获设置、分段按钮、双向开关联动、暂停恢复、手动附件及恢复偏好数据保留。
+3.0.0 验证：150 项测试通过；`npm run check`、离线 `npm ci`、重复构建字节一致及真实 watch 重建测试通过。Ego Lite 已验证捕获暂停恢复、站点双向开关、附件和处理列表跨站流程，测试均使用合成数据。
+
+预览素材更新：运行 `node scripts/render_readme_previews.mjs /tmp/site-multica-readme-previews`，使用 Ego Lite 渲染 `profiles.html`、`task.html`、`sidebar.html`，替换 assets 中对应图片。只使用合成数据，不连接 API。
+
+## 使用声明与免责声明
+
+本项目采用 [MIT License](./LICENSE)，是独立开发的第三方工具，与 Multica、BugDone、友盟、GitHub 等平台无官方关联，相关商标归各自权利人所有。
+
+本作品仅供交流，不建议用于商业用途，使用者应依法自行承担使用本作品产生的法律责任。上述用途建议为作者倡议，授权范围仍以 MIT 协议为准。
+
+请仅处理已获授权的数据，并遵守适用法律及平台条款。提交内容、日志和附件可能发送至所配置的服务及智能体，请先检查敏感信息。软件按“现状”提供，不作任何担保；责任限制以 MIT 许可证及适用法律为准。
+
+如对本项目的内容、标识或使用方式存在权利争议，请[提交 Issue](https://github.com/bosong/site-multica-bridge/issues)或联系作者，说明具体情况，我们将核实并视情况更正或移除相关内容。

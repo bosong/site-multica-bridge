@@ -1,6 +1,6 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
-const source=fs.readFileSync(require.resolve('../bugdone-multica.user.js'),'utf8');
-const core=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return {submittedSourceUrl:typeof submittedSourceUrl===\'function\'?submittedSourceUrl:null,draftSourceDetailUrl:typeof draftSourceDetailUrl===\'function\'?draftSourceDetailUrl:null,BUGDONE_PROFILE};})();')();
+const source=require('./helpers/source.cjs').source;
+const core=require('../.generated/test-core.cjs');
 test('新记录优先打开已保存详情链接，来源URL只接受无凭据HTTPS',()=>{
  assert.equal(typeof core.submittedSourceUrl,'function');
  assert.equal(core.submittedSourceUrl({detailUrl:'https://github.com/example/demo/issues/42',sourceUrl:'https://github.com/example/demo/issues'}),'https://github.com/example/demo/issues/42');

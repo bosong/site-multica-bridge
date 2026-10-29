@@ -1,22 +1,18 @@
 /** Generate inert README preview pages from the current userscript's real markup.
  * node scripts/render_readme_previews.mjs /tmp/site-multica-readme-previews
- * Capture task.html at 1440×1100 and sidebar.html at 1520×1050 in Ego Lite.
+ * Capture CSS viewports: task 1440×1100, profiles 1440×1400, sidebar 1520×1050 in Ego Lite.
  * All page content is synthetic. No userscript runtime or network API is started.
  */
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import {BUILTIN_PROFILES,GITHUB_PROFILE} from '../src/sites/builtins.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.resolve(process.argv[2] || '/tmp/site-multica-readme-previews');
-const source = await readFile(path.join(root, 'bugdone-multica.user.js'), 'utf8');
-const version = source.match(/const SCRIPT_VERSION = '([^']+)'/)[1];
-const marker = '    root.innerHTML = `';
-const start = source.indexOf(marker) + marker.length;
-const end = source.indexOf('`;', start);
-if (start < marker.length || end < start) throw Error('Current UI template was not found');
-const markup = source.slice(start, end).replaceAll('${SCRIPT_VERSION}', version);
-if (markup.includes('${')) throw Error('UI template added an interpolation; update the preview generator');
+const {version}=JSON.parse(await readFile(path.join(root,'package.json'),'utf8'));
+const markup=('<style>'+await readFile(path.join(root,'src/ui/styles.css'),'utf8')+'</style>'+await readFile(path.join(root,'src/ui/panel.html'),'utf8')).replaceAll('${SCRIPT_VERSION}',version);
+if(markup.includes('${')) throw Error('UI template added an interpolation; update the preview generator');
 
 const css = `
 *{box-sizing:border-box}body{margin:0;background:#edf2f8;color:#25334a;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
@@ -35,7 +31,12 @@ const demo = {
 
 function fixture(mode) {
   const sidebar = mode === 'sidebar';
-  const story = sidebar ? `
+  const target = sidebar ? 'settings' : mode === 'profiles' ? 'profiles' : 'multica';
+  const story = mode === 'profiles' ? `
+    <div class="kicker">SITE → MULTICA BRIDGE / ${version}</div><h1>为不同网站<br>配置捕获规则</h1>
+    <p class="lead">信息捕获、AI 任务创建、处理列表、设置、站点配置，五栏协同完成问题处理。</p>
+    <div class="pills"><span>接口捕获</span><span>文本捕获</span><span>空白填写</span></div>
+    <div class="example-card"><small>SOURCE CONFIGURATION · 内置与自定义</small><div class="feature"><b>1</b><div><strong>按站点启用或停用</strong><p>BugDone、友盟 APM、GitHub Issues 均提供内置规则。</p></div></div><div class="feature"><b>2</b><div><strong>配置字段映射与来源身份</strong><p>声明列表、详情接口与任务草稿模板，关联附件和查重键。</p></div></div><div class="feature"><b>3</b><div><strong>从模板添加更多网站</strong><p>选择「新建配置」后使用模板，核对后手动启用。</p></div></div></div>` : sidebar ? `
     <div class="kicker">SITE → MULTICA BRIDGE / ${version}</div><h1>抽屉展开，网页依然可用</h1>
     <p class="lead">侧边栏显示在右侧，原网页留在左侧。<br>在 UI 设置中切换显示方式、修改快捷键与管理页面入口。</p>
     <div class="pills"><span>侧边栏抽屉</span><span>浮窗模式</span><span>Ctrl + Shift + M</span></div>
@@ -56,10 +57,23 @@ for(const [id,label] of Object.entries({api:'Multica 官方 · https://api.multi
 $('panel').hidden=false;$('panel').dataset.display=${JSON.stringify(sidebar ? 'sidebar' : 'floating')};$('panel').dataset.open='true';
 $('launch').setAttribute('aria-expanded','true');$('launch').querySelector('.launch-text').textContent='Multica-AI · 已连接';
 for(const section of shadow.querySelectorAll('[role="tabpanel"]'))section.hidden=true;
-$('view-'+${JSON.stringify(sidebar ? 'settings' : 'multica')}).hidden=false;
-for(const tab of shadow.querySelectorAll('[role="tab"]'))tab.setAttribute('aria-selected',String(tab.dataset.tab===${JSON.stringify(sidebar ? 'settings' : 'multica')}));
+$('view-'+${JSON.stringify(target)}).hidden=false;
+for(const tab of shadow.querySelectorAll('[role="tab"]'))tab.setAttribute('aria-selected',String(tab.dataset.tab===${JSON.stringify(target)}));
 $('bug-action-bar').hidden=true;$('message').textContent='演示界面 · 所有信息均为虚构，未提交真实任务。';
-$('hide-native-ai').checked=true;$('shortcut').value='Ctrl + Shift + M';$('shortcut-description').textContent='在当前网页按 Ctrl + Shift + M 打开或关闭面板';
+for(const id of ['hide-native-ai','capture-enabled','capture-auto-attachments','builtin-enable-bugdone','builtin-enable-umeng','builtin-enable-github'])$(id).checked=true;
+for(const site of ${JSON.stringify(BUILTIN_PROFILES.map(p=>({name:p.metadata.name,domains:p.allowedOrigins.map(origin=>new URL(origin).hostname).join('、')})))}){
+ const row=document.createElement('div');row.className='setting-row';
+ const copy=document.createElement('div');copy.className='setting-copy';
+ const title=document.createElement('strong');title.textContent=site.name;
+ const description=document.createElement('small');description.textContent=site.domains;copy.append(title,description);
+ const label=document.createElement('label');label.className='switch setting-control';label.setAttribute('aria-label','启用'+site.name+'捕获');
+ const input=document.createElement('input');input.type='checkbox';input.checked=true;
+ const track=document.createElement('span');track.className='switch-track';track.setAttribute('aria-hidden','true');label.append(input,track);row.append(copy,label);$('capture-sites').append(row);
+}
+for(const id of ['capture-image-compressed','capture-log-summary'])$(id).setAttribute('aria-pressed','true');
+for(const id of ['capture-image-original','capture-log-full'])$(id).setAttribute('aria-pressed','false');
+setOption('profile-list','内置 · GitHub Issues · 已启用');$('profile-json').value=${JSON.stringify(JSON.stringify(GITHUB_PROFILE,null,2))};
+$('profile-feedback').textContent='示例：当前选择内置规则，模板仅在新建配置时可用。';$('shortcut').value='Ctrl + Shift + M';$('shortcut-description').textContent='在当前网页按 Ctrl + Shift + M 打开或关闭面板';
 $('mode-sidebar').setAttribute('aria-pressed',${JSON.stringify(String(sidebar))});$('mode-floating').setAttribute('aria-pressed',${JSON.stringify(String(!sidebar))});
 $('task-title').value=${JSON.stringify(demo.title)};$('task-description').value=${JSON.stringify(demo.description)};
 $('task-source').textContent='https://issues.example.test/demo/01';$('task-priority').value='medium';
@@ -71,5 +85,5 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{document.documentElement.da
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;"><title>Site Multica Bridge ${version} · 合成 UI 预览</title><style>${css}</style></head><body><main class="preview-page ${sidebar ? 'sidebar' : ''}">${story}<p class="privacy-note">模拟 UI · 根据当前 ${version} 界面生成<br>任务、配置、附件与网址均为合成数据。</p></main><div id="preview-host"></div><script>${init}</script></body></html>`;
 }
 await mkdir(out,{recursive:true});
-for(const mode of ['task','sidebar'])await writeFile(path.join(out,mode+'.html'),fixture(mode));
-console.log(JSON.stringify({version,output:out,pages:['task.html','sidebar.html']}));
+for(const mode of ['task','sidebar','profiles'])await writeFile(path.join(out,mode+'.html'),fixture(mode));
+console.log(JSON.stringify({version,output:out,pages:['task.html','sidebar.html','profiles.html']}));

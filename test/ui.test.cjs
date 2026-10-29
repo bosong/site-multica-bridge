@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
-const source = fs.readFileSync(require.resolve('../bugdone-multica.user.js'), 'utf8');
+const source = require('./helpers/source.cjs').source;
 
 test('站点配置是设置之后的独立 Tab，控件只属于该面板', () => {
   const navigation = source.slice(source.indexOf('<nav class="tabs"'), source.indexOf('</nav>'));

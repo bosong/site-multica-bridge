@@ -1,6 +1,6 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
-const source=fs.readFileSync(require.resolve('../bugdone-multica.user.js'),'utf8');
-const core=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return {connectionCacheTag,processingSiteView:typeof processingSiteView===\'function\'?processingSiteView:null,BUGDONE_PROFILE,GITHUB_PROFILE};})();')();
+const source=require('./helpers/source.cjs').source;
+const core=require('../.generated/test-core.cjs');
 const profiles=[core.BUGDONE_PROFILE,core.GITHUB_PROFILE],bug={bugId:'b'.repeat(32)},github={siteId:'github-issues'},manual={siteId:'manual',sourceUrl:'https://github.com/example/repo/issues/42'},unknown={siteId:'manual'},other={siteId:'manual',sourceUrl:'https://docs.example.test/topic'};
 const items=[bug,github,manual,unknown,other],bugUrl='https://www.bugdone.cn/cn/bugManagement_'+'a'.repeat(32);
 test('当前站点默认筛选，兼容旧BugDone和配置站点的手动来源记录',()=>{

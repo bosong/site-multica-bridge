@@ -17,3 +17,7 @@ bin-release/
 .DS_Store
 node_modules/
 *.log
+
+# Generated development/test artifacts
+.generated/
+*.user.js.*.tmp

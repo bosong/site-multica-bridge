@@ -1,9 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const source = fs.readFileSync(require.resolve('../bugdone-multica.user.js'), 'utf8');
-const core = new Function('return ' + source.slice(source.indexOf('(() => {'), source.indexOf('  // 调试桩：')) +
- 'return {parseResponse, BUGDONE_PROFILE, renderCaptureTemplate, locationOf, profileShareUrl, buildCapturedDraft};})();')();
+const source = require('./helpers/source.cjs').source;
+const core = require('../.generated/test-core.cjs');
 const start = source.indexOf('  function configuredShareUrl(');
 const end = source.indexOf('  function description(', start);
 const share = new Function('profileShareUrl', `${source.slice(start,end)}\nreturn configuredShareUrl;`)(core.profileShareUrl);

@@ -1,6 +1,6 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
-const source=fs.readFileSync(require.resolve('../bugdone-multica.user.js'),'utf8');
-const core=new Function('return '+source.slice(source.indexOf('(() => {'),source.indexOf('  // 调试桩：'))+'return {capturePreferences:typeof capturePreferences===\'function\'?capturePreferences:null,nextDraftAttachments:typeof nextDraftAttachments===\'function\'?nextDraftAttachments:null,restorePreferenceDefaults};})();')();
+const source=require('./helpers/source.cjs').source;
+const core=require('../.generated/test-core.cjs');
 test('捕获偏好兼容旧配置并校验版本值',()=>{
  assert.equal(typeof core.capturePreferences,'function');
  assert.deepEqual(core.capturePreferences({}),{captureEnabled:true,defaultImageMode:'compressed',defaultLogMode:'summary',autoCaptureAttachments:true});
