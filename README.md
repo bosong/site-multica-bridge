@@ -1,6 +1,6 @@
 # Site → Multica Bridge
 
-将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v3.0.0** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
+将网页问题整理成 Multica 任务并指派给智能体的油猴脚本。**v3.0.1** 支持 BugDone、友盟 APM、GitHub Issues，以及任意 HTTPS 网页的手动文字选取或直接填写任务；兼容 Tampermonkey 与提供原生桥的 FastlaneTool Mac WebView。
 
 ## 界面预览
 
@@ -140,6 +140,8 @@ npm run test:watch  # 独立验证真实监听重建；请勿与其他构建/测
 详细边界见 [3.0 架构说明](./doc/architecture-v3.md)，阶段与当前步骤见 [3.0 实施计划](./doc/plans/2026-10-28-v3-modular-source.md)。
 
 3.0.0 验证：150 项测试通过；`npm run check`、离线 `npm ci`、重复构建字节一致及真实 watch 重建测试通过。Ego Lite 已验证捕获暂停恢复、站点双向开关、附件和处理列表跨站流程，测试均使用合成数据。
+
+3.0.1 修复验证：159 项测试及构建、监听重建检查通过；友盟抽屉已通过 Ego Lite 验证和人工验收。
 
 预览素材更新：运行 `node scripts/render_readme_previews.mjs /tmp/site-multica-readme-previews`，使用 Ego Lite 渲染 `profiles.html`、`task.html`、`sidebar.html`，替换 assets 中对应图片。只使用合成数据，不连接 API。
 

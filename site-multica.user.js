@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site 接入 Multica
 // @namespace    local.site.multica
-// @version      3.0.0
+// @version      3.0.1
 // @description  多站点信息捕获与 Multica 智能体任务桥接
 // @updateURL    https://raw.githubusercontent.com/bosong/site-multica-bridge/main/site-multica.user.js
 // @downloadURL  https://raw.githubusercontent.com/bosong/site-multica-bridge/main/site-multica.user.js
@@ -1808,7 +1808,7 @@ ${data.afterStack}`].filter(Boolean).join("\n\n");
   __name(createPanelMarkup, "createPanelMarkup");
 
   // .generated/version.js
-  var SCRIPT_VERSION = "3.0.0";
+  var SCRIPT_VERSION = "3.0.1";
 
   // src/ui/mount.js
   function createMount(ctx) {

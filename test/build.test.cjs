@@ -5,7 +5,7 @@ test('3.0可构建为唯一单文件，保留元数据及无外部模块依赖',
  assert.ok(fs.existsSync(path.join(root,'site-multica.user.js')),'build must emit site-multica.user.js');
  assert.equal(fs.existsSync(path.join(root,'bugdone-multica.user.js')),false,'obsolete installation artifact must be removed');
  const script=fs.readFileSync(path.join(root,'site-multica.user.js'),'utf8');
- assert.ok(script.startsWith('// ==UserScript=='));assert.equal((script.match(/==UserScript==/g)||[]).length,1);assert.match(script,/@version\s+3\.0\.0/);
+ assert.ok(script.startsWith('// ==UserScript=='));assert.equal((script.match(/==UserScript==/g)||[]).length,1);assert.equal(/^\/\/ @version\s+(\S+)$/m.exec(script)?.[1],require('../package.json').version);
  for(const name of ['GM_xmlhttpRequest','GM_getValue','GM_setValue','unsafeWindow']) assert.ok(script.includes('// @grant        '+name));
  for(const key of ['updateURL','downloadURL']) assert.match(script,new RegExp('^// @'+key+'\\s+https://raw\\.githubusercontent\\.com/bosong/site-multica-bridge/main/site-multica\\.user\\.js$','m'));
  assert.equal(/\bimport\s*(?:\(|\{)|\brequire\s*\(|new Function\(|\beval\(/.test(script),false);new vm.Script(script);
